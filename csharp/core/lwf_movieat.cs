@@ -344,6 +344,7 @@ public partial class Movie : IObject
 		if (child.interactive == true)
 			m_lwf.SetInteractive();
 		child.parent = this;
+		child.SetRoot(m_lwf._root);
 		child.detachHandler = detachHandler;
 		child.attachName = attachName;
 		if (attachDepth >= 0) {
@@ -449,6 +450,15 @@ public partial class Movie : IObject
 		if (m_detachedLWFs != null)
 			foreach (LWFContainer lwfContainer in m_attachedLWFs.Values)
 				m_detachedLWFs[lwfContainer.child.attachName] = true;
+	}
+
+	public void RemoveMovieClip()
+	{
+		if (m_type == Type.ATTACHEDMOVIE) {
+			DetachFromParent();
+		} else if (m_lwf.attachName != null && m_lwf.parent != null) {
+			m_lwf.parent.DetachLWF(m_lwf.attachName);
+		}
 	}
 
 	public BitmapClip AttachBitmap(string linkageName, int depth)

@@ -24,17 +24,21 @@
 #include "lwf_cocos2dx_bitmap.h"
 #include "lwf_cocos2dx_factory.h"
 #include "lwf_cocos2dx_node.h"
+#include "lwf_cocos2dx_resourcecache.h"
 #include "lwf_core.h"
 #include "lwf_data.h"
 
 namespace LWF {
 
-class LWFBitmap : public cocos2d::Sprite
+class LWFBitmap : public cocos2d::Sprite, public BlendEquationProtocol
 {
 protected:
 	Matrix m_matrix;
 	cocos2d::V3F_C4B_T2F_Quad m_quad;
 	cocos2d::BlendFunc m_baseBlendFunc;
+	bool m_hasPremultipliedAlpha;
+	cocos2d::GLProgramState *m_glProgramState;
+	cocos2d::GLProgramState *m_additiveGlProgramState;
 
 public:
 	static LWFBitmap *create(const char *filename,
@@ -51,17 +55,32 @@ public:
 		return NULL;
 	}
 
+	LWFBitmap()
+		: cocos2d::Sprite(), BlendEquationProtocol(),
+			m_glProgramState(0), m_additiveGlProgramState(0)
+	{
+	}
+
+	virtual ~LWFBitmap()
+	{
+		CC_SAFE_RELEASE_NULL(m_glProgramState);
+		CC_SAFE_RELEASE_NULL(m_additiveGlProgramState);
+	}
+
 	bool initWithFileEx(const char *filename,
 		const Format::Texture &t,
 		const Format::TextureFragment &f,
 		const Format::BitmapEx &bx)
 	{
-		if (!cocos2d::Sprite::initWithFile(filename))
+		cocos2d::LWFResourceCache *cache =
+			cocos2d::LWFResourceCache::sharedLWFResourceCache();
+		cocos2d::Texture2D *texture = cache->addImage(filename);
+		if (!cocos2d::Sprite::initWithTexture(texture))
 			return false;
 
-		bool hasPremultipliedAlpha = getTexture()->hasPremultipliedAlpha() ||
+		m_hasPremultipliedAlpha = getTexture()->hasPremultipliedAlpha() ||
 			t.format == Format::TEXTUREFORMAT_PREMULTIPLIEDALPHA;
-		m_baseBlendFunc = {(GLenum)(hasPremultipliedAlpha ?
+		m_baseBlendFunc = {(GLenum)(m_hasPremultipliedAlpha ?
 			GL_ONE : GL_SRC_ALPHA), GL_ONE_MINUS_SRC_ALPHA};
 
 		float tw = (float)t.width;
@@ -150,12 +169,38 @@ public:
 
 		cocos2d::Node *node = getParent();
 		const Color &c = cx->multi;
+		const Color &a = cx->add;
 		const cocos2d::Color3B &dc = node->getDisplayedColor();
 		setColor((cocos2d::Color3B){
 			(GLubyte)(c.red * dc.r),
 			(GLubyte)(c.green * dc.g),
 			(GLubyte)(c.blue * dc.b)});
-		setOpacity((GLubyte)(c.alpha * node->getDisplayedOpacity()));
+		setOpacity(
+			(GLubyte)((c.alpha + a.alpha) * node->getDisplayedOpacity()));
+
+		if (a.red == 0 && a.green == 0 && a.blue == 0) {
+			if (m_glProgramState != 0 &&
+					getGLProgramState() != m_glProgramState) {
+				setGLProgramState(m_glProgramState);
+			}
+		} else {
+			if (m_glProgramState == 0) {
+				m_glProgramState = getGLProgramState();
+				m_glProgramState->retain();
+
+				cocos2d::LWFResourceCache *cache =
+					cocos2d::LWFResourceCache::sharedLWFResourceCache();
+				m_additiveGlProgramState = cocos2d::GLProgramState::create(
+					m_hasPremultipliedAlpha ? cache->getAddColorPAGLProgram() :
+						cache->getAddColorGLProgram());
+				m_additiveGlProgramState->retain();
+			}
+
+			m_additiveGlProgramState->setUniformVec3(
+				"additiveColor", cocos2d::Vec3(a.red, a.green, a.blue));
+			if (getGLProgramState() != m_additiveGlProgramState)
+				setGLProgramState(m_additiveGlProgramState);
+		}
 	}
 
 	virtual void setBatchNode(
@@ -187,6 +232,20 @@ public:
 	{
 		return m_baseBlendFunc;
 	}
+
+	virtual void draw(cocos2d::Renderer *renderer,
+		const cocos2d::Mat4 &transform, uint32_t flags) override
+	{
+		if (m_blendEquation)
+			BlendEquationProtocol::addBeginCommand(
+				renderer, transform, flags, _globalZOrder);
+
+		cocos2d::Sprite::draw(renderer, transform, flags);
+
+		if (m_blendEquation)
+			BlendEquationProtocol::addEndCommand(
+				renderer, transform, flags, _globalZOrder);
+	}
 };
 
 LWFBitmapRenderer::LWFBitmapRenderer(
@@ -196,6 +255,8 @@ LWFBitmapRenderer::LWFBitmapRenderer(
 	const Format::Bitmap &b = l->data->bitmaps[bitmap->objectId];
 	if (b.textureFragmentId == -1)
 		return;
+
+	m_factory = (LWFRendererFactory *)l->rendererFactory.get();
 
 	Format::BitmapEx bx;
 	bx.matrixId = b.matrixId;
@@ -209,18 +270,22 @@ LWFBitmapRenderer::LWFBitmapRenderer(
 		l->data->textureFragments[b.textureFragmentId];
 	const Format::Texture &t = l->data->textures[f.textureId];
 	string texturePath = t.GetFilename(l->data.get());
-	string filename = node->basePath + texturePath;
+	string basePath = m_factory->GetBasePath();
+	string filename = basePath + texturePath;
 
-	if (LWF::GetTextureLoadHandler())
+	if (node->getTextureLoadHandler()) {
+		filename = node->getTextureLoadHandler()(
+			filename, basePath, texturePath);
+	} else if (LWF::GetTextureLoadHandler()) {
 		filename = LWF::GetTextureLoadHandler()(
-			filename, node->basePath, texturePath);
+			filename, basePath, texturePath);
+	}
 
 	m_sprite = LWFBitmap::create(filename.c_str(), t, f, bx);
 	if (!m_sprite)
 		return;
 
 	l->data->resourceCache[filename] = true;
-	m_factory = (LWFRendererFactory *)l->rendererFactory.get();
 	node->addChild(m_sprite);
 }
 
@@ -232,21 +297,28 @@ LWFBitmapRenderer::LWFBitmapRenderer(
 	if (bx.textureFragmentId == -1)
 		return;
 
+	m_factory = (LWFRendererFactory *)l->rendererFactory.get();
+
 	const Format::TextureFragment &f =
 		l->data->textureFragments[bx.textureFragmentId];
 	const Format::Texture &t = l->data->textures[f.textureId];
 	string texturePath = t.GetFilename(l->data.get());
-	string filename = node->basePath + texturePath;
+	string basePath = m_factory->GetBasePath();
+	string filename = basePath + texturePath;
 
-	if (LWF::GetTextureLoadHandler())
+	if (node->getTextureLoadHandler()) {
+		filename = node->getTextureLoadHandler()(
+			filename, basePath, texturePath);
+	} else if (LWF::GetTextureLoadHandler()) {
 		filename = LWF::GetTextureLoadHandler()(
-			filename, node->basePath, texturePath);
+			filename, basePath, texturePath);
+	}
 
 	m_sprite = LWFBitmap::create(filename.c_str(), t, f, bx);
 	if (!m_sprite)
 		return;
 
-	m_factory = (LWFRendererFactory *)l->rendererFactory.get();
+	l->data->resourceCache[filename] = true;
 	node->addChild(m_sprite);
 }
 
@@ -273,7 +345,7 @@ void LWFBitmapRenderer::Render(
 
     cocos2d::BlendFunc baseBlendFunc = m_sprite->getBaseBlendFunc();
 	if (!m_factory->Render(
-			lwf, m_sprite, renderingIndex, visible, &baseBlendFunc))
+			lwf, m_sprite, m_sprite, renderingIndex, visible, &baseBlendFunc))
 		return;
 
 	m_sprite->setMatrixAndColorTransform(matrix, colorTransform);

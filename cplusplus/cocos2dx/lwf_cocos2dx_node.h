@@ -36,31 +36,36 @@ class LWFNode : public Sprite
 {
 public:
 	LWF::shared_ptr<LWF::LWF> lwf;
-	LWF::string basePath;
 
 private:
+	LWF::TextureLoadHandler _textureLoadHandler;
 	EventListenerTouchOneByOne *_listener;
 	bool _destructed;
 	bool _removeFromParentRequested;
 
 public:
-	static LWFNode *create(const char *pszFileName, void *l = 0);
+	static LWFNode *create(const char *pszFileName,
+		void *l = 0, LWF::TextureLoadHandler textureLoadHandler = 0);
 	static void dump();
 
 public:
 	LWFNode();
 	virtual ~LWFNode();
 
+	LWF::TextureLoadHandler getTextureLoadHandler() const
+		{return _textureLoadHandler;}
 	bool isDestructed() const {return _destructed;}
 
-    bool initWithLWFFile(const std::string &filename, void *l = 0);
+    bool initWithLWFFile(const std::string &filename,
+		void *l = 0, LWF::TextureLoadHandler textureLoadHandler = 0);
 
 	virtual LWF::shared_ptr<LWF::LWF> attachLWF(
 		const char *pszFilename, const char *pszTarget,
 		const char *pszAttachName);
 
 	virtual void update(float dt) override;
-	virtual void draw(Renderer *renderer, const Mat4& transform, uint32_t flags) override;
+	virtual void draw(Renderer *renderer,
+		const Mat4& transform, uint32_t flags) override;
 
 	virtual void onEnter() override;
 	virtual void onExit() override;

@@ -26,8 +26,11 @@ bindTarget={
 			read_properties={
 				{'name', 'getName'},
 				{'rootMovie', 'getRootMovie'},
+				{'_root', 'get_root'},
 				{'width', 'getWidth'},
 				{'height', 'getHeight'},
+				{'pointX', 'getPointX'},
+				{'pointY', 'getPointY'},
 			},
 			memberFunctions={[[
 void SetText(std::string textName, std::string text) @ setText
@@ -37,10 +40,10 @@ void StopMovie(std::string instanceName) @ stopMovie
 void NextFrameMovie(std::string instanceName) @ nextFrameMovie
 void PrevFrameMovie(std::string instanceName) @ prevFrameMovie
 void SetVisibleMovie(std::string instanceName, bool visible) @ setVisibleMovie
-void GotoAndStopMovie(std::string instanceName, std::string label) @ gotoAndStopMovie
 void GotoAndStopMovie(std::string instanceName, int frameNo) @ gotoAndStopMovie
-void GotoAndPlayMovie(std::string instanceName, std::string label) @ gotoAndPlayMovie
+void GotoAndStopMovie(std::string instanceName, std::string label) @ gotoAndStopMovie
 void GotoAndPlayMovie(std::string instanceName, int frameNo) @ gotoAndPlayMovie
+void GotoAndPlayMovie(std::string instanceName, std::string label) @ gotoAndPlayMovie
 void MoveMovie(std::string instanceName, float vx, float vy) @ moveMovie
 void MoveToMovie(std::string instanceName, float vx, float vy) @ moveToMovie
 void RotateMovie(std::string instanceName, float degree) @ rotateMovie
@@ -60,6 +63,8 @@ void ClearButtonEventHandler(std::string instanceName) @ clearButtonEventListene
 static std::string getName(LWF::LWF &o);
 static float getWidth(LWF::LWF &o);
 static float getHeight(LWF::LWF &o);
+static float getPointX(LWF::LWF &o);
+static float getPointY(LWF::LWF &o);
 			]]},
 			customFunctionsToRegister={
 				'addEventListener',
@@ -70,6 +75,8 @@ static float getHeight(LWF::LWF &o);
 static std::string getName(LWF::LWF &o){return o.name;}
 static float getWidth(LWF::LWF &o){return o.width;}
 static float getHeight(LWF::LWF &o){return o.height;}
+static float getPointX(LWF::LWF &o){return o.pointX;}
+static float getPointY(LWF::LWF &o){return o.pointY;}
 
 static int _bind_getRootMovie(lua_State *L)
 {
@@ -80,6 +87,18 @@ static int _bind_getRootMovie(lua_State *L)
 	}
 	LWF::LWF const &a = static_cast<LWF::LWF &>(*Luna<LWF::LWF>::check(L, 1));
 	Luna<LWF::Movie>::push(L, a.rootMovie.get(), false);
+	return 1;
+}
+
+static int _bind_get_root(lua_State *L)
+{
+	if (lua_gettop(L) != 1 ||
+			Luna<void>::get_uniqueid(L, 1) != LunaTraits<LWF::LWF>::uniqueID) {
+		luna_printStack(L);
+		luaL_error(L, "luna typecheck failed: LWF.LWF._root");
+	}
+	LWF::LWF const &a = static_cast<LWF::LWF &>(*Luna<LWF::LWF>::check(L, 1));
+	Luna<LWF::Movie>::push(L, a._root.get(), false);
 	return 1;
 }
 
@@ -210,6 +229,8 @@ static int addEventListener(lua_State *L)
 				{'name', 'getName'},
 				{'parent', 'getParent'},
 				{'currentFrame', 'getCurrentFrame'},
+				{'currentLabel', 'getCurrentLabel'},
+				{'currentLabels', 'getCurrentLabels'},
 				{'totalFrames', 'getTotalFrames'},
 				{'visible', 'getVisible'},
 				{'x', 'getX'},
@@ -244,10 +265,10 @@ void Stop() @ stop
 void NextFrame() @ nextFrame
 void PrevFrame() @ prevFrame
 void GotoFrame(int frameNo) @ gotoFrame
-void GotoAndStop(std::string label) @ gotoAndStop
 void GotoAndStop(int frameNo) @ gotoAndStop
-void GotoAndPlay(std::string label) @ gotoAndPlay
+void GotoAndStop(std::string label) @ gotoAndStop
 void GotoAndPlay(int frameNo) @ gotoAndPlay
+void GotoAndPlay(std::string label) @ gotoAndPlay
 void Move(float vx, float vy) @ move
 void MoveTo(float vx, float vy) @ moveTo
 void Rotate(float degree) @ rotate
@@ -256,17 +277,20 @@ void Scale(float vx, float vy) @ scale
 void ScaleTo(float vx, float vy) @ scaleTo
 void RemoveEventHandler(std::string eventName, int id) @ removeEventListener
 void ClearEventHandler(std::string eventName) @ clearEventListener
-void DispatchEvent(std::string eventName) @ dispatchEvent
 void SwapAttachedMovieDepth(int depth0, int depth1) @ swapAttachedMovieDepth
 void DetachMovie(std::string aName) @ detachMovie
 void DetachMovie(LWF::Movie *movie) @ detachMovie
 void DetachFromParent() @ detachFromParent
+void DetachLWF(std::string aName) @ detachLWF
+void DetachAllLWFs() @ detachAllLWFs
+void RemoveMovieClip() @ removeMovieClip
 void SwapAttachedBitmapDepth(int depth0, int depth1) @ swapAttachedBitmapDepth
 void DetachBitmap(int depth) @ detachBitmap
 			]]},
 			staticMemberFunctions={[[
 static std::string getName(LWF::Movie &o);
 static int getCurrentFrame(LWF::Movie &o);
+static std::string getCurrentLabel(LWF::Movie &o);
 static int getTotalFrames(LWF::Movie &o);
 static bool getVisible(LWF::Movie &o);
 static float getX(LWF::Movie &o);
@@ -329,10 +353,12 @@ if (lua_gettop(L) == 3 && Luna<void>::get_uniqueid(L, 1) ==
 				'attachLWF',
 				'attachBitmap',
 				'getAttachedBitmap',
+				'dispatchEvent',
 			},
 			wrapperCode=[[
 static std::string getName(LWF::Movie &o){return o.name;}
 static int getCurrentFrame(LWF::Movie &o){return o.currentFrame;}
+static std::string getCurrentLabel(LWF::Movie &o){return o.GetCurrentLabel();}
 static int getTotalFrames(LWF::Movie &o){return o.totalFrames;}
 static bool getVisible(LWF::Movie &o){return o.visible;}
 static float getX(LWF::Movie &o){return o.GetX();}
@@ -382,6 +408,53 @@ static int _bind_getParent(lua_State *L)
 		Luna<LWF::Movie>::push(L, a.parent, false);
 	else
 		lua_pushnil(L);
+	return 1;
+}
+
+static int _bind_getCurrentLabels(lua_State *L)
+{
+	if (lua_gettop(L) != 1 || Luna<void>::get_uniqueid(L, 1) !=
+			LunaTraits<LWF::Movie>::uniqueID) {
+		luna_printStack(L);
+		luaL_error(L, "luna typecheck failed: LWF.Movie.currentLabels");
+	}
+	LWF::Movie &a = static_cast<LWF::Movie &>(*Luna<LWF::Movie>::check(L, 1));
+	const LWF::CurrentLabels currentLabels = a.GetCurrentLabels();
+
+	lua_createtable(L, (int)currentLabels.size(), 0);
+	/* -1: table */
+	LWF::CurrentLabels::const_iterator
+		it(currentLabels.begin()), itend(currentLabels.end());
+	for (int i = 1; it != itend; ++it, ++i) {
+		lua_pushnumber(L, i);
+		/* -2: table */
+		/* -1: index */
+		lua_createtable(L, 0, 2);
+		/* -3: table */
+		/* -2: index */
+		/* -1: table */
+		lua_pushnumber(L, it->frame);
+		/* -4: table */
+		/* -3: index */
+		/* -2: table */
+		/* -1: frame */
+		lua_setfield(L, -2, "frame");
+		/* -3: table */
+		/* -2: index */
+		/* -1: table */
+		lua_pushstring(L, it->name.c_str());
+		/* -4: table */
+		/* -3: index */
+		/* -2: table */
+		/* -1: name */
+		lua_setfield(L, -2, "name");
+		/* -3: table */
+		/* -2: index */
+		/* -1: table */
+		lua_settable(L, -3);
+		/* -1: table */
+	}
+	/* -1: table */
 	return 1;
 }
 
@@ -512,6 +585,37 @@ static int addEventListener(lua_State *L)
 	return a.lwf->AddEventHandlerLua(&a);
 }
 
+static int dispatchEvent(lua_State *L)
+{
+	LWF::Movie *a;
+	LWF::string eventName;
+	int args = lua_gettop(L);
+	if (args != 2)
+		goto error;
+	if (Luna<void>::get_uniqueid(L, 1) != LunaTraits<LWF::Movie>::uniqueID)
+		goto error;
+	if (lua_isstring(L, 2)) {
+		eventName = lua_tostring(L, 2);
+	} else if (lua_istable(L, 2)) {
+		lua_getfield(L, 2, "type");
+		if (!lua_isstring(L, -1))
+			goto error;
+		eventName = lua_tostring(L, -1);
+		lua_pop(L, 1);
+	} else {
+		goto error;
+	}
+
+	a = Luna<LWF::Movie>::check(L, 1);
+	a->DispatchEvent(eventName);
+	return 0;
+
+error:
+	luna_printStack(L);
+	luaL_error(L, "luna typecheck failed: LWF.Movie.dispatchEvent");
+	return 1;
+}
+
 			]],
 		},
 		{
@@ -530,6 +634,10 @@ static int addEventListener(lua_State *L)
 				'float scaleY',
 				'float rotation',
 				'float alpha',
+				'float offsetX',
+				'float offsetY',
+				'float originalWidth',
+				'float originalHeight',
 			},
 			read_properties={
 				{'name', 'getName'},

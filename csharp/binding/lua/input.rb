@@ -25,8 +25,11 @@
 			:readProperties=>[
 				['name', 'getName'],
 				['rootMovie', 'getRootMovie'],
+				['_root', 'get_root'],
 				['width', 'getWidth'],
 				['height', 'getHeight'],
+				['pointX', 'getPointX'],
+				['pointY', 'getPointY'],
 			],
 			:memberFunctions=><<-EOS,
 void SetText(string textName, string text) @ setText
@@ -36,10 +39,10 @@ void StopMovie(string instanceName) @ stopMovie
 void NextFrameMovie(string instanceName) @ nextFrameMovie
 void PrevFrameMovie(string instanceName) @ prevFrameMovie
 void SetVisibleMovie(string instanceName, bool visible) @ setVisibleMovie
-void GotoAndStopMovie(string instanceName, string label) @ gotoAndStopMovie
 void GotoAndStopMovie(string instanceName, int frameNo) @ gotoAndStopMovie
-void GotoAndPlayMovie(string instanceName, string label) @ gotoAndPlayMovie
+void GotoAndStopMovie(string instanceName, string label) @ gotoAndStopMovie
 void GotoAndPlayMovie(string instanceName, int frameNo) @ gotoAndPlayMovie
+void GotoAndPlayMovie(string instanceName, string label) @ gotoAndPlayMovie
 void MoveMovie(string instanceName, float vx, float vy) @ moveMovie
 void MoveToMovie(string instanceName, float vx, float vy) @ moveToMovie
 void RotateMovie(string instanceName, float degree) @ rotateMovie
@@ -61,6 +64,8 @@ void ClearButtonEventHandler(string instanceName) @ clearButtonEventListener
 static string getName(LWF.LWF o);
 static float getWidth(LWF.LWF o);
 static float getHeight(LWF.LWF o);
+static float getPointX(LWF.LWF o);
+static float getPointY(LWF.LWF o);
 			EOS
 
 			:customFunctionsToRegister=>[
@@ -73,6 +78,8 @@ static float getHeight(LWF.LWF o);
 	public static string getName(LWF.LWF o){return o.name;}
 	public static float getWidth(LWF.LWF o){return o.width;}
 	public static float getHeight(LWF.LWF o){return o.height;}
+	public static float getPointX(LWF.LWF o){return o.pointX;}
+	public static float getPointY(LWF.LWF o){return o.pointY;}
 
 	public static int _bind_getRootMovie(Lua.lua_State L)
 	{
@@ -84,6 +91,19 @@ static float getHeight(LWF.LWF o);
 
 		LWF.LWF a = Luna_LWF_LWF.check(L, 1);
 		Luna_LWF_Movie.push(L, a.rootMovie, false);
+		return 1;
+	}
+
+	public static int _bind_get_root(Lua.lua_State L)
+	{
+		if (Lua.lua_gettop(L) != 1 ||
+				Luna.get_uniqueid(L, 1) != LunaTraits_LWF_LWF.uniqueID) {
+			Luna.printStack(L);
+			Lua.luaL_error(L, "luna typecheck failed: LWF.LWF._root");
+		}
+
+		LWF.LWF a = Luna_LWF_LWF.check(L, 1);
+		Luna_LWF_Movie.push(L, a._root, false);
 		return 1;
 	}
 
@@ -110,7 +130,7 @@ static float getHeight(LWF.LWF o);
 		}
 
 		LWF.LWF a = Luna_LWF_LWF.check(L, 1);
-		return a.AddEventHandlerLua();
+		return a.AddMovieEventHandlerLua();
 	}
 
 	public static int addButtonEventListener(Lua.lua_State L)
@@ -123,7 +143,7 @@ static float getHeight(LWF.LWF o);
 		}
 
 		LWF.LWF a = Luna_LWF_LWF.check(L, 1);
-		return a.AddEventHandlerLua();
+		return a.AddButtonEventHandlerLua();
 	}
 
 		EOS
@@ -151,6 +171,10 @@ static float getHitY(LWF.Button o);
 static float getWidth(LWF.Button o);
 static float getHeight(LWF.Button o);
 			EOS
+
+			:customFunctionsToRegister=>[
+				'addEventListener',
+      ],
 
 			:wrapperCode=><<-EOS,
 	public static string getName(LWF.Button o){return o.name;}
@@ -184,6 +208,19 @@ static float getHeight(LWF.Button o);
 		return 1;
 	}
 
+	public static int addEventListener(Lua.lua_State L)
+	{
+		if (Lua.lua_gettop(L) != 3 ||
+				Luna.get_uniqueid(L, 1) != LunaTraits_LWF_Button.uniqueID ||
+				Lua.lua_isstring(L, 2) == 0 || !Lua.lua_isfunction(L, 3)) {
+			Luna.printStack(L);
+      Lua.luaL_error(L, "luna typecheck failed: LWF.Button.addEventListener");
+		}
+
+		LWF.Button a = Luna_LWF_Button.check(L, 1);
+    return a.lwf.AddEventHandlerLua(null, a);
+	}
+
 			EOS
 		},{
 			:name=>'LWF.Movie',
@@ -191,6 +228,8 @@ static float getHeight(LWF.Button o);
 				['name', 'getName'],
 				['parent', 'getParent'],
 				['currentFrame', 'getCurrentFrame'],
+				['currentLabel', 'getCurrentLabel'],
+				['currentLabels', 'getCurrentLabels'],
 				['totalFrames', 'getTotalFrames'],
 				['visible', 'getVisible'],
 				['x', 'getX'],
@@ -226,10 +265,10 @@ void Stop() @ stop
 void NextFrame() @ nextFrame
 void PrevFrame() @ prevFrame
 void GotoFrame(int frameNo) @ gotoFrame
-void GotoAndStop(string label) @ gotoAndStop
 void GotoAndStop(int frameNo) @ gotoAndStop
-void GotoAndPlay(string label) @ gotoAndPlay
+void GotoAndStop(string label) @ gotoAndStop
 void GotoAndPlay(int frameNo) @ gotoAndPlay
+void GotoAndPlay(string label) @ gotoAndPlay
 void Move(float vx, float vy) @ move
 void MoveTo(float vx, float vy) @ moveTo
 void Rotate(float degree) @ rotate
@@ -238,11 +277,13 @@ void Scale(float vx, float vy) @ scale
 void ScaleTo(float vx, float vy) @ scaleTo
 void RemoveEventHandler(string eventName, int id) @ removeEventListener
 void ClearEventHandler(string eventName) @ clearEventListener
-void DispatchEvent(string eventName) @ dispatchEvent
 void SwapAttachedMovieDepth(int depth0, int depth1) @ swapAttachedMovieDepth
 void DetachMovie(string aName) @ detachMovie
 void DetachMovie(LWF.Movie movie) @ detachMovie
 void DetachFromParent() @ detachFromParent
+void DetachLWF(string aName) @ detachLWF
+void DetachAllLWFs() @ detachAllLWFs
+void RemoveMovieClip() @ removeMovieClip
 LWF.BitmapClip AttachBitmap(string linkageName, int depth) @ attachBitmap
 LWF.BitmapClip GetAttachedBitmap(int depth) @ getAttachedBitmap
 void SwapAttachedBitmapDepth(int depth0, int depth1) @ swapAttachedBitmapDepth
@@ -252,6 +293,7 @@ void DetachBitmap(int depth) @ detachBitmap
 			:staticMemberFunctions=><<-EOS,
 static string getName(LWF.Movie o);
 static int getCurrentFrame(LWF.Movie o);
+static string getCurrentLabel(LWF.Movie o);
 static int getTotalFrames(LWF.Movie o);
 static bool getVisible(LWF.Movie o);
 static float getX(LWF.Movie o);
@@ -313,14 +355,17 @@ static void setBlue(LWF.Movie o, float v);
 			EOS
 
 			:customFunctionsToRegister=>[
+				'addEventListener',
 				'attachMovie',
 				'attachEmptyMovie',
 				'attachLWF',
+        'dispatchEvent',
 			],
 
 			:wrapperCode=><<-EOS,
 	static string getName(LWF.Movie o){return o.name;}
 	static int getCurrentFrame(LWF.Movie o){return o.currentFrame;}
+	static string getCurrentLabel(LWF.Movie o){return o.GetCurrentLabel();}
 	static int getTotalFrames(LWF.Movie o){return o.totalFrames;}
 	static bool getVisible(LWF.Movie o){return o.visible;}
 	static float getX(LWF.Movie o){return o.x;}
@@ -367,6 +412,54 @@ static void setBlue(LWF.Movie o, float v);
 		LWF.Movie a =
 			Luna_LWF_Movie.check(L, 1);
 		Luna_LWF_Movie.push(L, a.parent, false);
+		return 1;
+	}
+
+	public static int _bind_getCurrentLabels(Lua.lua_State L)
+	{
+		if (Lua.lua_gettop(L) != 1 || Luna.get_uniqueid(L, 1) !=
+				LunaTraits_LWF_Movie.uniqueID) {
+			Luna.printStack(L);
+			Lua.luaL_error(L, "luna typecheck failed: LWF.Movie.currentLabels");
+		}
+		LWF.Movie a =
+			Luna_LWF_Movie.check(L, 1);
+    List<LWF.LabelData> currentLabels = a.GetCurrentLabels();
+	
+		Lua.lua_createtable(L, currentLabels.Count, 0);
+		/* -1: table */
+		int i = 1;
+		foreach(LWF.LabelData labelData in currentLabels) {
+			Lua.lua_pushnumber(L, i);
+			/* -2: table */
+			/* -1: index */
+			Lua.lua_createtable(L, 0, 2);
+			/* -3: table */
+			/* -2: index */
+			/* -1: table */
+			Lua.lua_pushnumber(L, labelData.frame);
+			/* -4: table */
+			/* -3: index */
+			/* -2: table */
+			/* -1: frame */
+			Lua.lua_setfield(L, -2, "frame");
+			/* -3: table */
+			/* -2: index */
+			/* -1: table */
+			Lua.lua_pushstring(L, labelData.name);
+			/* -4: table */
+			/* -3: index */
+			/* -2: table */
+			/* -1: name */
+			Lua.lua_setfield(L, -2, "name");
+			/* -3: table */
+			/* -2: index */
+			/* -1: table */
+			Lua.lua_settable(L, -3);
+			/* -1: table */
+			++i;
+		}
+		/* -1: table */
 		return 1;
 	}
 
@@ -448,6 +541,49 @@ static void setBlue(LWF.Movie o, float v);
 		return 1;
 	}
 
+	public static int addEventListener(Lua.lua_State L)
+	{
+		if (Lua.lua_gettop(L) != 3 ||
+				Luna.get_uniqueid(L, 1) != LunaTraits_LWF_Movie.uniqueID ||
+				Lua.lua_isstring(L, 2) == 0 || !Lua.lua_isfunction(L, 3)) {
+			Luna.printStack(L);
+      Lua.luaL_error(L, "luna typecheck failed: LWF.Movie.addEventListener");
+		}
+
+		LWF.Movie a = Luna_LWF_Movie.check(L, 1);
+    return a.lwf.AddEventHandlerLua(a);
+	}
+
+	public static int dispatchEvent(Lua.lua_State L)
+	{
+    LWF.Movie a;
+    string eventName;
+		if (Lua.lua_gettop(L) != 2)
+      goto error;
+		if (Luna.get_uniqueid(L, 1) != LunaTraits_LWF_Movie.uniqueID)
+      goto error;
+    if (Lua.lua_isstring(L, 2)!=0) {
+      eventName = Lua.lua_tostring(L, 2).ToString();
+    } else if (Lua.lua_istable(L, 2)) {
+      Lua.lua_getfield(L, 2, "type");
+      if (Lua.lua_isstring(L, -1)==0)
+        goto error;
+      eventName = Lua.lua_tostring(L, -1).ToString();
+      Lua.lua_pop(L, 1);
+    } else {
+      goto error;
+    }
+
+		a = Luna_LWF_Movie.check(L, 1);
+		a.DispatchEvent(eventName);
+    return 0;
+
+	error:
+		Luna.printStack(L);
+    Lua.luaL_error(L, "luna typecheck failed: LWF.Movie.dispatchEvent");
+    return 1;
+	}
+
 			EOS
 		},{
 			:name=>'LWF.BitmapClip',
@@ -464,6 +600,10 @@ static void setBlue(LWF.Movie o, float v);
 				'float scaleY',
 				'float rotation',
 				'float alpha',
+				'float offsetX',
+				'float offsetY',
+				'float originalWidth',
+				'float originalHeight',
 			],
 			:readProperties=>[
 				['name', 'getName'],

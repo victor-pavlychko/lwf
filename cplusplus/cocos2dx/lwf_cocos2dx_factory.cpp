@@ -51,7 +51,8 @@ public:
 	}
 
 	LWFMask()
-		: m_renderTexture(0)
+		: m_renderTexture(0),
+			m_blendFunc({GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA})
 	{
 	}
 
@@ -107,20 +108,33 @@ static void PlaceNode(Node *newParent, Node *node)
 	}
 }
 
-static GLenum GetBlendDstFactor(int blendMode)
+static void GetBlendFunc(BlendFunc &blendFunc, int blendMode)
 {
 	switch (blendMode) {
 	case Format::BLEND_MODE_ADD:
-		return GL_ONE;
+		// keep blendFunc.src
+		blendFunc.dst = GL_ONE;
+		break;
 
 	case Format::BLEND_MODE_MULTIPLY:
-		return GL_DST_COLOR;
+		blendFunc.src = GL_DST_COLOR;
+		blendFunc.dst = GL_ONE_MINUS_SRC_ALPHA;
+		break;
 
 	case Format::BLEND_MODE_SCREEN:
-		return GL_ONE;
+		blendFunc.src = GL_ONE_MINUS_DST_COLOR;
+		blendFunc.dst = GL_ONE;
+		break;
+
+	case Format::BLEND_MODE_SUBTRACT:
+		// keep blendFunc.src
+		blendFunc.dst = GL_ONE;
+		break;
 
 	default:
-		return GL_ONE_MINUS_SRC_ALPHA;
+		// keep blendFunc.src
+		blendFunc.dst = GL_ONE_MINUS_SRC_ALPHA;
+		break;
 	}
 }
 
@@ -227,8 +241,9 @@ void LWFRendererFactory::ScaleForWidth(class LWF *lwf, float w, float h)
 	lwf->property->Scale(scale, scale);
 }
 
-bool LWFRendererFactory::Render(class LWF *lwf,
-	Node *node, int renderingIndex, bool visible, BlendFunc *baseBlendFunc)
+bool LWFRendererFactory::Render(class LWF *lwf, Node *node,
+	BlendEquationProtocol *be, int renderingIndex, bool visible,
+	BlendFunc *baseBlendFunc)
 {
 	m_renderingIndex = renderingIndex;
 
@@ -278,8 +293,9 @@ bool LWFRendererFactory::Render(class LWF *lwf,
 								{GL_DST_ALPHA, GL_ZERO});
 							break;
 						}
-						mask->setBlendFunc(
-							{GL_ONE, GetBlendDstFactor(m_blendMode)});
+						BlendFunc blendFunc = {GL_ONE, GL_ZERO};
+						GetBlendFunc(blendFunc, m_blendMode);
+						mask->setBlendFunc(blendFunc);
 						break;
 					}
 				}
@@ -305,14 +321,65 @@ bool LWFRendererFactory::Render(class LWF *lwf,
 	node->setLocalZOrder(renderingIndex);
 
 	BlendProtocol *p = dynamic_cast<BlendProtocol *>(node);
-	if (!p)
-		return true;
+	if (p) {
+		BlendFunc blendFunc =
+			baseBlendFunc ? *baseBlendFunc : p->getBlendFunc();
+		GetBlendFunc(blendFunc, m_blendMode);
+		p->setBlendFunc(blendFunc);
+	}
 
-	BlendFunc blendFunc = baseBlendFunc ? *baseBlendFunc : p->getBlendFunc();
-	blendFunc.dst = GetBlendDstFactor(m_blendMode);
-	p->setBlendFunc(blendFunc);
+	BlendEquationProtocol *ep = dynamic_cast<BlendEquationProtocol *>(node);
+	if (ep)
+		ep->setBlendEquation(m_blendMode);
 
 	return true;
+}
+
+BlendEquationProtocol::BlendEquationProtocol()
+	: m_blendEquation(0)
+{
+}
+
+void BlendEquationProtocol::setBlendEquation(int blendMode)
+{
+	switch (blendMode) {
+	case Format::BLEND_MODE_SUBTRACT:
+		m_blendEquation = GL_FUNC_REVERSE_SUBTRACT;
+		break;
+	default:
+		m_blendEquation = 0;
+		break;
+	}
+}
+
+void BlendEquationProtocol::addBeginCommand(cocos2d::Renderer *renderer,
+	const cocos2d::Mat4 &transform, uint32_t flags, float globalZOrder)
+{
+	m_beginCommand.init(globalZOrder);
+	m_beginCommand.func = CC_CALLBACK_0(
+		BlendEquationProtocol::onBlendEquationBegin, this, transform, flags);
+	renderer->addCommand(&m_beginCommand);
+}
+
+void BlendEquationProtocol::addEndCommand(cocos2d::Renderer *renderer,
+	const cocos2d::Mat4 &transform, uint32_t flags, float globalZOrder)
+{
+	m_endCommand.init(globalZOrder);
+	m_endCommand.func = CC_CALLBACK_0(
+		BlendEquationProtocol::onBlendEquationEnd, this, transform, flags);
+	renderer->addCommand(&m_endCommand);
+}
+
+void BlendEquationProtocol::onBlendEquationBegin(
+	const cocos2d::Mat4 &transform, uint32_t flags)
+{
+	glBlendEquationSeparate(m_blendEquation, GL_FUNC_ADD);
+}
+
+void BlendEquationProtocol::onBlendEquationEnd(
+	const cocos2d::Mat4 &transform, uint32_t flags)
+{
+	glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
 }
 
 }	// namespace LWF

@@ -20,15 +20,21 @@
 
 class Format
   class @Constant
-    @HEADER_SIZE = 324
-
-    @FORMAT_VERSION_0 = 0x13
+    @HEADER_SIZE = 332
+    @FORMAT_VERSION_0 = 0x14
     @FORMAT_VERSION_1 = 0x12
     @FORMAT_VERSION_2 = 0x11
+    @FORMAT_VERSION_141211 = 0x141211
 
-    @FORMAT_VERSION_COMPAT_0 = 0x12
-    @FORMAT_VERSION_COMPAT_1 = 0x10
-    @FORMAT_VERSION_COMPAT_2 = 0x10
+    @HEADER_SIZE_COMPAT0 = 324
+    @FORMAT_VERSION_COMPAT0_0 = 0x13
+    @FORMAT_VERSION_COMPAT0_1 = 0x12
+    @FORMAT_VERSION_COMPAT0_2 = 0x11
+
+    @HEADER_SIZE_COMPAT1 = 324
+    @FORMAT_VERSION_COMPAT1_0 = 0x12
+    @FORMAT_VERSION_COMPAT1_1 = 0x10
+    @FORMAT_VERSION_COMPAT1_2 = 0x10
 
     @FORMAT_TYPE = 0
 
@@ -52,6 +58,7 @@ class Format
     @BLEND_MODE_MASK = 4
     @BLEND_MODE_MULTIPLY = 5
     @BLEND_MODE_SCREEN = 6
+    @BLEND_MODE_SUBTRACT = 7
 
   class @StringBase
     constructor:(@stringId) ->
@@ -67,14 +74,16 @@ class Format
     constructor:(@filename, @format, @width, @height, @scale) ->
 
   class @TextureFragment
-    constructor:(@stringId, @textureId, @rotated, @x, @y, @u, @v, @w, @h) ->
+    constructor:( \
+        @stringId, @textureId, @rotated, @x, @y, @u, @v, @w, @h, @ow, @oh) ->
 
     setFilename:(data) ->
       @filename = data.strings[@stringId]
       return
 
   class @TextureFragmentReplacement
-    constructor:(@filename, @textureId, @rotated, @x, @y, @u, @v, @w, @h) ->
+    constructor:( \
+        @filename, @textureId, @rotated, @x, @y, @u, @v, @w, @h, @ow, @oh) ->
 
   class @Bitmap
     constructor:(@matrixId, @textureFragmentId) ->
@@ -192,6 +201,9 @@ class Format
   class @ControlMoveMC
     constructor:(@placeId, @matrixId, @colorTransformId) ->
 
+  class @ControlMoveMCB
+    constructor:(@placeId, @matrixId, @colorTransformId, @blendMode) ->
+
   class @Control
     class @Type
       @MOVE = 0
@@ -199,7 +211,8 @@ class Format
       @MOVEC = 2
       @MOVEMC = 3
       @ANIMATION = 4
-      @CONTROL_MAX = 5
+      @MOVEMCB = 5
+      @CONTROL_MAX = 6
 
     constructor:(@controlType, @controlId) ->
 
@@ -234,6 +247,7 @@ class Format
       @formatVersion0, \
       @formatVersion1, \
       @formatVersion2, \
+      @formatVersion, \
       @option, \
       @width, \
       @height, \
@@ -271,6 +285,7 @@ class Format
       @controlMoveM, \
       @controlMoveC, \
       @controlMoveMC, \
+      @controlMoveMCB, \
       @control, \
       @frame, \
       @movieClipEvent, \

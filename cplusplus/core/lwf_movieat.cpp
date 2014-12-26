@@ -205,6 +205,7 @@ void Movie::DeleteAttachedLWF(Movie *p, shared_ptr<LWFContainer> lwfContainer,
 			l->Destroy();
 		}
 		l->parent = 0;
+		l->_root = 0;
 		l->detachHandler = 0;
 		l->attachName.clear();
 		l->depth = -1;
@@ -261,6 +262,7 @@ void Movie::AttachLWF(shared_ptr<LWF> child, string aName,
 	}
 
 	child->parent = this;
+	child->_root = lwf->_root;
 	child->scaleByStage = lwf->scaleByStage;
 	child->detachHandler = detachHandler;
 	child->attachName = aName;
@@ -329,6 +331,15 @@ void Movie::DetachAllLWFs()
 		it(m_attachedLWFs.begin()), itend(m_attachedLWFs.end());
 	for (; it != itend; ++it)
 		m_detachedLWFs[it->second->child->attachName] = true;
+}
+
+void Movie::RemoveMovieClip()
+{
+	if (type == OType::ATTACHEDMOVIE) {
+		DetachFromParent();
+	} else if (!lwf->attachName.empty() && lwf->parent) {
+		lwf->parent->DetachLWF(lwf->attachName);
+	}
 }
 
 shared_ptr<BitmapClip> Movie::AttachBitmap(string linkageName, int aDepth)

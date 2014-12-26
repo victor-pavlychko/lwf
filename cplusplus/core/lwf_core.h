@@ -53,7 +53,6 @@ typedef vector<pair<int, ExecHandler> > ExecHandlerList;
 typedef map<string, pair<string, TextRenderer *> > TextDictionary;
 typedef map<int, bool> EventFunctions;
 typedef vector<int> RenderingModes;
-typedef function<string (string, string, string)> TextureLoadHandler;
 typedef function<shared_ptr<LWF> (string)> LWFLoader;
 typedef function<void ()> LWFUnloader;
 
@@ -77,6 +76,7 @@ public:
 	shared_ptr<IRendererFactory> rendererFactory;
 	shared_ptr<Property> property;
 	shared_ptr<Movie> rootMovie;
+	shared_ptr<Movie> _root;
 	Button *focus;
 	bool focusOnLink;
 	Button *pressed;

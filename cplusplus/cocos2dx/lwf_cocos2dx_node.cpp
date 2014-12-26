@@ -18,7 +18,6 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#include "base/CCDirector.h"
 #include "base/CCEventDispatcher.h"
 #include "base/CCEventListenerTouch.h"
 #include "lwf_cocos2dx_factory.h"
@@ -34,10 +33,11 @@ NS_CC_BEGIN;
 
 using namespace LWF;
 
-LWFNode *LWFNode::create(const char *pszFileName, void *l)
+LWFNode *LWFNode::create(
+	const char *pszFileName, void *l, TextureLoadHandler textureLoadHandler)
 {
 	LWFNode *node = new LWFNode();
-	if (node && node->initWithLWFFile(pszFileName, l)) {
+	if (node && node->initWithLWFFile(pszFileName, l, textureLoadHandler)) {
 		node->autorelease();
 		return node;
 	}
@@ -58,17 +58,46 @@ LWFNode::LWFNode()
 
 LWFNode::~LWFNode()
 {
-	_destructed = true;
 	if (lwf) {
 		shared_ptr<LWFData> data = lwf->data;
 		lwf->Destroy();
-		CC_SAFE_RELEASE(_texture);
-		_texture = 0;
+		CC_SAFE_RELEASE_NULL(_texture);
 		LWFResourceCache::sharedLWFResourceCache()->unloadLWFData(data);
 	}
+	_destructed = true;
 }
 
-bool LWFNode::initWithLWFFile(const string &path, void *l)
+class LWFLoader
+{
+private:
+	LWFNode *m_node;
+	void *m_l;
+
+public:
+	LWFLoader(LWFNode *node, void *l) : m_node(node), m_l(l) {}
+
+	shared_ptr<class LWF> operator()(const string &path)
+	{
+		shared_ptr<LWFData> data =
+			LWFResourceCache::sharedLWFResourceCache()->loadLWFData(path);
+		if (!data)
+			return shared_ptr<class LWF>();
+
+		size_t pos = path.find_last_of('/');
+		string basePath;
+		if (pos != string::npos)
+			basePath = path.substr(0, pos + 1);
+
+		shared_ptr<LWFRendererFactory> factory =
+			make_shared<LWFRendererFactory>(m_node, basePath);
+		shared_ptr<class LWF> child =
+			make_shared<class LWF>(data, factory, m_l);
+		return child;
+	}
+};
+
+bool LWFNode::initWithLWFFile(
+	const string &path, void *l, TextureLoadHandler textureLoadHandler)
 {
 	shared_ptr<LWFData> data =
 		LWFResourceCache::sharedLWFResourceCache()->loadLWFData(path);
@@ -76,6 +105,7 @@ bool LWFNode::initWithLWFFile(const string &path, void *l)
 		return false;
 
 	size_t pos = path.find_last_of('/');
+	string basePath;
 	if (pos != string::npos)
 		basePath = path.substr(0, pos + 1);
 
@@ -84,8 +114,16 @@ bool LWFNode::initWithLWFFile(const string &path, void *l)
 		result = Sprite::init();
 	} else {
 		const Format::Texture &t = data->textures[0];
-		string filename = basePath + t.GetFilename(data.get());
+		string texturePath = t.GetFilename(data.get());
+		string filename = basePath + texturePath;
+		if (textureLoadHandler) {
+			filename = textureLoadHandler(filename, basePath, texturePath);
+		} else if (::LWF::LWF::GetTextureLoadHandler()) {
+			filename = ::LWF::LWF::GetTextureLoadHandler()(
+				filename, basePath, texturePath);
+		}
 		result = Sprite::initWithFile(filename.c_str());
+		data->resourceCache[filename] = true;
 	}
 	if (!result) {
 		LWFResourceCache::sharedLWFResourceCache()->unloadLWFData(data);
@@ -96,8 +134,11 @@ bool LWFNode::initWithLWFFile(const string &path, void *l)
 	setVertexRect(Rect(0, 0, 0, 0));
 
 	shared_ptr<LWFRendererFactory> factory =
-		make_shared<LWFRendererFactory>(this);
+		make_shared<LWFRendererFactory>(this, basePath);
 	lwf = make_shared<class LWF>(data, factory, l);
+	lwf->lwfLoader = LWFLoader(this, l);
+
+	_textureLoadHandler = textureLoadHandler;
 
 	scheduleUpdate();
 
@@ -110,24 +151,13 @@ shared_ptr<class LWF> LWFNode::attachLWF(
 	if (!lwf)
 		return shared_ptr<class LWF>();
 
-	shared_ptr<LWFData> data =
-		LWFResourceCache::sharedLWFResourceCache()->loadLWFData(pszFilename);
-	if (!data)
-		return shared_ptr<class LWF>();
-
-	shared_ptr<LWFRendererFactory> factory =
-		make_shared<LWFRendererFactory>(this);
-	shared_ptr<class LWF> child = make_shared<class LWF>(data, factory);
-	if (!child) {
-		LWFResourceCache::sharedLWFResourceCache()->unloadLWFData(data);
-		return child;
-	}
-
 	Movie *movie = lwf->SearchMovieInstance(pszTarget);
-	if (!movie) {
-		LWFResourceCache::sharedLWFResourceCache()->unloadLWFData(data);
+	if (!movie)
 		return shared_ptr<class LWF>();
-	}
+
+	shared_ptr<class LWF> child = lwf->lwfLoader(pszFilename);
+	if (!child)
+		return shared_ptr<class LWF>();
 
 	movie->AttachLWF(child, pszAttachName);
 

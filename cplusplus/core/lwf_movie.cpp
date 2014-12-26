@@ -96,6 +96,7 @@ Movie::Movie(LWF *l, Movie *p, int objId, int instId, int mId, int cId,
 	m_isRoot = objId == lwf->data->header.rootMovieId;
 	m_requestedCalculateBounds = false;
 	m_calculateBoundsCallback = 0;
+	m_currentLabelsCached = false;
 
 	m_displayList.resize(data->depths);
 
@@ -183,7 +184,6 @@ void Movie::ExecObject(int dlDepth, int objId,
 		case OType::MOVIE:
 			obj = make_shared<Movie>(lwf, this,
 				dataObjectId, instId, matrixId, colorTransformId);
-			((Movie *)obj.get())->blendMode = dlBlendMode;
 			break;
 
 		case OType::BITMAP:
@@ -207,6 +207,9 @@ void Movie::ExecObject(int dlDepth, int objId,
 			break;
 		}
 	}
+
+	if (obj->IsMovie())
+		((Movie *)obj.get())->blendMode = dlBlendMode;
 
 	if (obj->IsMovie() || obj->IsButton()) {
 		IObject *instance = (IObject *)obj.get();
@@ -357,6 +360,17 @@ void Movie::PostExec(bool progressing)
 						const Format::Place &p = d->places[ctrl.placeId];
 						ExecObject(p.depth, p.objectId, ctrl.matrixId,
 							ctrl.colorTransformId, p.instanceId, p.blendMode);
+					}
+					break;
+
+				case Format::Control::MOVEMCB:
+					{
+						const Format::ControlMoveMCB &ctrl =
+							d->controlMoveMCBs[control.controlId];
+						const Format::Place &p = d->places[ctrl.placeId];
+						ExecObject(p.depth, p.objectId, ctrl.matrixId,
+							ctrl.colorTransformId, p.instanceId,
+							ctrl.blendMode);
 					}
 					break;
 
@@ -805,6 +819,9 @@ void Movie::Render(bool v, int rOffset)
 	if (blendMode != Format::BLEND_MODE_NORMAL) {
 		switch (blendMode) {
 		case Format::BLEND_MODE_ADD:
+		case Format::BLEND_MODE_MULTIPLY:
+		case Format::BLEND_MODE_SCREEN:
+		case Format::BLEND_MODE_SUBTRACT:
 			lwf->BeginBlendMode(blendMode);
 			useBlendMode = true;
 			break;
@@ -1209,8 +1226,10 @@ void Movie::RemoveEventHandler(string eventName, int id)
 {
 	MovieEventHandlerListDictionary::iterator it =
 		m_eventHandlers.find(eventName);
-	if (it == m_eventHandlers.end())
+	if (it == m_eventHandlers.end()) {
+		m_handler.Remove(id);
 		return;
+	}
 
 	MovieEventHandlerList& list = it->second;
 	list.erase(remove_if(list.begin(), list.end(), Pred(id)), list.end());
@@ -1219,6 +1238,7 @@ void Movie::RemoveEventHandler(string eventName, int id)
 void Movie::ClearEventHandler(string eventName)
 {
 	m_eventHandlers.erase(eventName);
+	m_handler.Clear(eventName);
 }
 
 int Movie::SetEventHandler(string eventName, MovieEventHandler eventHandler)
@@ -1249,6 +1269,99 @@ void Movie::RequestCalculateBounds(MovieEventHandler callback)
 Bounds Movie::GetBounds()
 {
 	return m_bounds;
+}
+
+static struct {
+	bool operator()(const LabelData &a, const LabelData &b) {   
+		return a.frame < b.frame;
+	}
+} LabelDataComparator;
+
+void Movie::CacheCurrentLabels()
+{
+	if (m_currentLabelsCached)
+		return;
+
+	m_currentLabelsCached = true;
+	const map<int, int> *labels = lwf->GetMovieLabels(this);
+	if (labels == 0)
+		return;
+
+	map<int, int>::const_iterator it(labels->begin()), itend(labels->end());
+	for (; it != itend; ++it) {
+		LabelData labelData;
+		labelData.frame = it->second + 1;
+		labelData.name = lwf->data->strings[it->first];
+		m_currentLabelsCache.emplace_back(labelData);
+	}
+	std::sort(m_currentLabelsCache.begin(),
+		m_currentLabelsCache.end(), LabelDataComparator);
+}
+
+string Movie::GetCurrentLabel()
+{
+	CacheCurrentLabels();
+
+	if (m_currentLabelsCache.empty())
+		return string();
+
+	int currentFrameTmp = m_currentFrameInternal + 1;
+	if (currentFrameTmp < 1)
+		currentFrameTmp = 1;
+
+	string labelName;
+	CurrentLabelCache::const_iterator it =
+		m_currentLabelCache.find(currentFrameTmp);
+	if (it != m_currentLabelCache.end()) {
+		labelName = it->second;
+	} else {
+		const LabelData &firstLabel = m_currentLabelsCache.front();
+		const LabelData &lastLabel = m_currentLabelsCache.back();
+		if (currentFrameTmp < firstLabel.frame) {
+			labelName = string();
+		} else if (currentFrameTmp == firstLabel.frame) {
+			labelName = firstLabel.name;
+		} else if (currentFrameTmp >= lastLabel.frame) {
+			labelName = lastLabel.name;
+		} else {
+			int l = 0;
+			int ln = m_currentLabelsCache[l].frame;
+			int r = (int)m_currentLabelsCache.size() - 1;
+			int rn = m_currentLabelsCache[r].frame;
+			for (;;) {
+				if ((l == r) || (r - l == 1)) {
+					if (currentFrameTmp < ln)
+						labelName = string();
+					else if (currentFrameTmp == rn)
+						labelName = m_currentLabelsCache[r].name;
+					else
+						labelName = m_currentLabelsCache[l].name;
+					break;
+				}
+				int n = (int)floorf((r - l) / 2.0f) + l;
+				int nn = m_currentLabelsCache[n].frame;
+				if (currentFrameTmp < nn) {
+					r = n;
+					rn = nn;
+				} else if (currentFrameTmp > nn) {
+					l = n;
+					ln = nn;
+				} else {
+					labelName = m_currentLabelsCache[n].name;
+					break;
+				}
+			}
+		}
+		m_currentLabelCache[currentFrameTmp] = labelName;
+	}
+
+	return labelName;
+}
+
+const CurrentLabels Movie::GetCurrentLabels()
+{
+	CacheCurrentLabels();
+	return m_currentLabelsCache;
 }
 
 }	// namespace LWF

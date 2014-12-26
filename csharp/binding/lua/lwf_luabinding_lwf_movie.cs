@@ -39,10 +39,12 @@ public class LunaTraits_LWF_Movie
         new RegType("scaleTo", impl_LunaTraits_LWF_Movie._bind_scaleTo),
         new RegType("removeEventListener", impl_LunaTraits_LWF_Movie._bind_removeEventListener),
         new RegType("clearEventListener", impl_LunaTraits_LWF_Movie._bind_clearEventListener),
-        new RegType("dispatchEvent", impl_LunaTraits_LWF_Movie._bind_dispatchEvent),
         new RegType("swapAttachedMovieDepth", impl_LunaTraits_LWF_Movie._bind_swapAttachedMovieDepth),
         new RegType("detachMovie", impl_LunaTraits_LWF_Movie._bind_detachMovie),
         new RegType("detachFromParent", impl_LunaTraits_LWF_Movie._bind_detachFromParent),
+        new RegType("detachLWF", impl_LunaTraits_LWF_Movie._bind_detachLWF),
+        new RegType("detachAllLWFs", impl_LunaTraits_LWF_Movie._bind_detachAllLWFs),
+        new RegType("removeMovieClip", impl_LunaTraits_LWF_Movie._bind_removeMovieClip),
         new RegType("attachBitmap", impl_LunaTraits_LWF_Movie._bind_attachBitmap),
         new RegType("getAttachedBitmap", impl_LunaTraits_LWF_Movie._bind_getAttachedBitmap),
         new RegType("swapAttachedBitmapDepth", impl_LunaTraits_LWF_Movie._bind_swapAttachedBitmapDepth),
@@ -50,6 +52,8 @@ public class LunaTraits_LWF_Movie
         new RegType("getName", impl_LunaTraits_LWF_Movie._bind_getName),
         new RegType("getParent", impl_LunaTraits_LWF_Movie._bind_getParent),
         new RegType("getCurrentFrame", impl_LunaTraits_LWF_Movie._bind_getCurrentFrame),
+        new RegType("getCurrentLabel", impl_LunaTraits_LWF_Movie._bind_getCurrentLabel),
+        new RegType("getCurrentLabels", impl_LunaTraits_LWF_Movie._bind_getCurrentLabels),
         new RegType("getTotalFrames", impl_LunaTraits_LWF_Movie._bind_getTotalFrames),
         new RegType("getVisible", impl_LunaTraits_LWF_Movie._bind_getVisible),
         new RegType("getX", impl_LunaTraits_LWF_Movie._bind_getX),
@@ -72,9 +76,11 @@ public class LunaTraits_LWF_Movie
         new RegType("setRed", impl_LunaTraits_LWF_Movie._bind_setRed),
         new RegType("setGreen", impl_LunaTraits_LWF_Movie._bind_setGreen),
         new RegType("setBlue", impl_LunaTraits_LWF_Movie._bind_setBlue),
+        new RegType("addEventListener", impl_LunaTraits_LWF_Movie.addEventListener),
         new RegType("attachMovie", impl_LunaTraits_LWF_Movie.attachMovie),
         new RegType("attachEmptyMovie", impl_LunaTraits_LWF_Movie.attachEmptyMovie),
         new RegType("attachLWF", impl_LunaTraits_LWF_Movie.attachLWF),
+        new RegType("dispatchEvent", impl_LunaTraits_LWF_Movie.dispatchEvent),
 
 		new RegType("__index", impl_LunaTraits_LWF_Movie.__index),
 		new RegType("__newindex", impl_LunaTraits_LWF_Movie.__newindex),
@@ -99,6 +105,7 @@ public class impl_LunaTraits_LWF_Movie
 {
 	static string getName(LWF.Movie o){return o.name;}
 	static int getCurrentFrame(LWF.Movie o){return o.currentFrame;}
+	static string getCurrentLabel(LWF.Movie o){return o.GetCurrentLabel();}
 	static int getTotalFrames(LWF.Movie o){return o.totalFrames;}
 	static bool getVisible(LWF.Movie o){return o.visible;}
 	static float getX(LWF.Movie o){return o.x;}
@@ -145,6 +152,54 @@ public class impl_LunaTraits_LWF_Movie
 		LWF.Movie a =
 			Luna_LWF_Movie.check(L, 1);
 		Luna_LWF_Movie.push(L, a.parent, false);
+		return 1;
+	}
+
+	public static int _bind_getCurrentLabels(Lua.lua_State L)
+	{
+		if (Lua.lua_gettop(L) != 1 || Luna.get_uniqueid(L, 1) !=
+				LunaTraits_LWF_Movie.uniqueID) {
+			Luna.printStack(L);
+			Lua.luaL_error(L, "luna typecheck failed: LWF.Movie.currentLabels");
+		}
+		LWF.Movie a =
+			Luna_LWF_Movie.check(L, 1);
+    List<LWF.LabelData> currentLabels = a.GetCurrentLabels();
+	
+		Lua.lua_createtable(L, currentLabels.Count, 0);
+		/* -1: table */
+		int i = 1;
+		foreach(LWF.LabelData labelData in currentLabels) {
+			Lua.lua_pushnumber(L, i);
+			/* -2: table */
+			/* -1: index */
+			Lua.lua_createtable(L, 0, 2);
+			/* -3: table */
+			/* -2: index */
+			/* -1: table */
+			Lua.lua_pushnumber(L, labelData.frame);
+			/* -4: table */
+			/* -3: index */
+			/* -2: table */
+			/* -1: frame */
+			Lua.lua_setfield(L, -2, "frame");
+			/* -3: table */
+			/* -2: index */
+			/* -1: table */
+			Lua.lua_pushstring(L, labelData.name);
+			/* -4: table */
+			/* -3: index */
+			/* -2: table */
+			/* -1: name */
+			Lua.lua_setfield(L, -2, "name");
+			/* -3: table */
+			/* -2: index */
+			/* -1: table */
+			Lua.lua_settable(L, -3);
+			/* -1: table */
+			++i;
+		}
+		/* -1: table */
 		return 1;
 	}
 
@@ -224,6 +279,49 @@ public class impl_LunaTraits_LWF_Movie
 		Luna.printStack(L);
 		Lua.luaL_error(L, "luna typecheck failed: LWF.Movie.attachLWF");
 		return 1;
+	}
+
+	public static int addEventListener(Lua.lua_State L)
+	{
+		if (Lua.lua_gettop(L) != 3 ||
+				Luna.get_uniqueid(L, 1) != LunaTraits_LWF_Movie.uniqueID ||
+				Lua.lua_isstring(L, 2) == 0 || !Lua.lua_isfunction(L, 3)) {
+			Luna.printStack(L);
+      Lua.luaL_error(L, "luna typecheck failed: LWF.Movie.addEventListener");
+		}
+
+		LWF.Movie a = Luna_LWF_Movie.check(L, 1);
+    return a.lwf.AddEventHandlerLua(a);
+	}
+
+	public static int dispatchEvent(Lua.lua_State L)
+	{
+    LWF.Movie a;
+    string eventName;
+		if (Lua.lua_gettop(L) != 2)
+      goto error;
+		if (Luna.get_uniqueid(L, 1) != LunaTraits_LWF_Movie.uniqueID)
+      goto error;
+    if (Lua.lua_isstring(L, 2)!=0) {
+      eventName = Lua.lua_tostring(L, 2).ToString();
+    } else if (Lua.lua_istable(L, 2)) {
+      Lua.lua_getfield(L, 2, "type");
+      if (Lua.lua_isstring(L, -1)==0)
+        goto error;
+      eventName = Lua.lua_tostring(L, -1).ToString();
+      Lua.lua_pop(L, 1);
+    } else {
+      goto error;
+    }
+
+		a = Luna_LWF_Movie.check(L, 1);
+		a.DispatchEvent(eventName);
+    return 0;
+
+	error:
+		Luna.printStack(L);
+    Lua.luaL_error(L, "luna typecheck failed: LWF.Movie.dispatchEvent");
+    return 1;
 	}
 
 
@@ -329,9 +427,9 @@ public class impl_LunaTraits_LWF_Movie
   {
 
 	LWF.Movie self=Luna_LWF_Movie.check(L,1);
-		string label=Lua.lua_tostring(L,2).ToString();
+		int frameNo=(int)Lua.lua_tonumber(L,2);
 	try {
-		self.GotoAndStop(label);
+		self.GotoAndStop(frameNo);
 	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
 	return 0;
   }
@@ -339,9 +437,9 @@ public class impl_LunaTraits_LWF_Movie
   {
 
 	LWF.Movie self=Luna_LWF_Movie.check(L,1);
-		int frameNo=(int)Lua.lua_tonumber(L,2);
+		string label=Lua.lua_tostring(L,2).ToString();
 	try {
-		self.GotoAndStop(frameNo);
+		self.GotoAndStop(label);
 	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
 	return 0;
   }
@@ -349,9 +447,9 @@ public class impl_LunaTraits_LWF_Movie
   {
 
 	LWF.Movie self=Luna_LWF_Movie.check(L,1);
-		string label=Lua.lua_tostring(L,2).ToString();
+		int frameNo=(int)Lua.lua_tonumber(L,2);
 	try {
-		self.GotoAndPlay(label);
+		self.GotoAndPlay(frameNo);
 	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
 	return 0;
   }
@@ -359,9 +457,9 @@ public class impl_LunaTraits_LWF_Movie
   {
 
 	LWF.Movie self=Luna_LWF_Movie.check(L,1);
-		int frameNo=(int)Lua.lua_tonumber(L,2);
+		string label=Lua.lua_tostring(L,2).ToString();
 	try {
-		self.GotoAndPlay(frameNo);
+		self.GotoAndPlay(label);
 	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
 	return 0;
   }
@@ -479,19 +577,6 @@ public class impl_LunaTraits_LWF_Movie
 	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
 	return 0;
   }
-  public static int _bind_dispatchEvent(Lua.lua_State L)
-  {
-	if (Lua.lua_gettop(L)!=2
-            || Luna.get_uniqueid(L,1)!=29625181 
-            || Lua.lua_isstring(L,2)==0) { Luna.printStack(L); Lua.luaL_error(L, "luna typecheck failed:dispatchEvent(LWF.Movie self)"); }
-
-	LWF.Movie self=Luna_LWF_Movie.check(L,1);
-		string eventName=Lua.lua_tostring(L,2).ToString();
-	try {
-		self.DispatchEvent(eventName);
-	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
-	return 0;
-  }
   public static int _bind_swapAttachedMovieDepth(Lua.lua_State L)
   {
 	if (Lua.lua_gettop(L)!=3
@@ -535,6 +620,41 @@ public class impl_LunaTraits_LWF_Movie
 	LWF.Movie self=Luna_LWF_Movie.check(L,1);
 	try {
 		self.DetachFromParent();
+	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
+	return 0;
+  }
+  public static int _bind_detachLWF(Lua.lua_State L)
+  {
+	if (Lua.lua_gettop(L)!=2
+            || Luna.get_uniqueid(L,1)!=29625181 
+            || Lua.lua_isstring(L,2)==0) { Luna.printStack(L); Lua.luaL_error(L, "luna typecheck failed:detachLWF(LWF.Movie self)"); }
+
+	LWF.Movie self=Luna_LWF_Movie.check(L,1);
+		string aName=Lua.lua_tostring(L,2).ToString();
+	try {
+		self.DetachLWF(aName);
+	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
+	return 0;
+  }
+  public static int _bind_detachAllLWFs(Lua.lua_State L)
+  {
+	if (Lua.lua_gettop(L)!=1
+            || Luna.get_uniqueid(L,1)!=29625181 ) { Luna.printStack(L); Lua.luaL_error(L, "luna typecheck failed:detachAllLWFs(LWF.Movie self)"); }
+
+	LWF.Movie self=Luna_LWF_Movie.check(L,1);
+	try {
+		self.DetachAllLWFs();
+	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
+	return 0;
+  }
+  public static int _bind_removeMovieClip(Lua.lua_State L)
+  {
+	if (Lua.lua_gettop(L)!=1
+            || Luna.get_uniqueid(L,1)!=29625181 ) { Luna.printStack(L); Lua.luaL_error(L, "luna typecheck failed:removeMovieClip(LWF.Movie self)"); }
+
+	LWF.Movie self=Luna_LWF_Movie.check(L,1);
+	try {
+		self.RemoveMovieClip();
 	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
 	return 0;
   }
@@ -599,11 +719,11 @@ public class impl_LunaTraits_LWF_Movie
   public static int _bind_gotoAndStop(Lua.lua_State L)
   {
 	if (Lua.lua_gettop(L)==2
-            || Luna.get_uniqueid(L,1)==29625181 
-            || Lua.lua_isstring(L,2)==1) return _bind_gotoAndStop_overload_1(L);
+            && Luna.get_uniqueid(L,1)==29625181 
+            && Lua.lua_isnumber(L, 2)==1) return _bind_gotoAndStop_overload_1(L);
 	if (Lua.lua_gettop(L)==2
-            || Luna.get_uniqueid(L,1)==29625181 
-            || Lua.lua_isnumber(L, 2)==1) return _bind_gotoAndStop_overload_2(L);
+            && Luna.get_uniqueid(L,1)==29625181 
+            && Lua.lua_isstring(L,2)==1) return _bind_gotoAndStop_overload_2(L);
 	Lua.luaL_error(L, "gotoAndStop cannot find overloads.");
 
 	return 0;
@@ -611,11 +731,11 @@ public class impl_LunaTraits_LWF_Movie
   public static int _bind_gotoAndPlay(Lua.lua_State L)
   {
 	if (Lua.lua_gettop(L)==2
-            || Luna.get_uniqueid(L,1)==29625181 
-            || Lua.lua_isstring(L,2)==1) return _bind_gotoAndPlay_overload_1(L);
+            && Luna.get_uniqueid(L,1)==29625181 
+            && Lua.lua_isnumber(L, 2)==1) return _bind_gotoAndPlay_overload_1(L);
 	if (Lua.lua_gettop(L)==2
-            || Luna.get_uniqueid(L,1)==29625181 
-            || Lua.lua_isnumber(L, 2)==1) return _bind_gotoAndPlay_overload_2(L);
+            && Luna.get_uniqueid(L,1)==29625181 
+            && Lua.lua_isstring(L,2)==1) return _bind_gotoAndPlay_overload_2(L);
 	Lua.luaL_error(L, "gotoAndPlay cannot find overloads.");
 
 	return 0;
@@ -623,11 +743,11 @@ public class impl_LunaTraits_LWF_Movie
   public static int _bind_detachMovie(Lua.lua_State L)
   {
 	if (Lua.lua_gettop(L)==2
-            || Luna.get_uniqueid(L,1)==29625181 
-            || Lua.lua_isstring(L,2)==1) return _bind_detachMovie_overload_1(L);
+            && Luna.get_uniqueid(L,1)==29625181 
+            && Lua.lua_isstring(L,2)==1) return _bind_detachMovie_overload_1(L);
 	if (Lua.lua_gettop(L)==2
-            || Luna.get_uniqueid(L,1)==29625181 
-            || Luna.get_uniqueid(L,2)== LunaTraits_LWF_Movie.uniqueID) return _bind_detachMovie_overload_2(L);
+            && Luna.get_uniqueid(L,1)==29625181 
+            && Luna.get_uniqueid(L,2)== LunaTraits_LWF_Movie.uniqueID) return _bind_detachMovie_overload_2(L);
 	Lua.luaL_error(L, "detachMovie cannot find overloads.");
 
 	return 0;
@@ -651,6 +771,17 @@ public class impl_LunaTraits_LWF_Movie
 	try {
 		int ret=getCurrentFrame(o);
 		Lua.lua_pushnumber(L, ret);
+	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
+	return 1;
+  }
+  public static int _bind_getCurrentLabel(Lua.lua_State L)
+  {
+	if (Lua.lua_gettop(L)!=1
+            || Luna.get_uniqueid(L,1)!=29625181 ) { Luna.printStack(L); Lua.luaL_error(L, "luna typecheck failed:getCurrentLabel(LWF.Movie self ...)"); }
+		LWF.Movie o=Luna_LWF_Movie.check(L,1);
+	try {
+		string ret=getCurrentLabel(o);
+		Lua.lua_pushstring(L, ret);
 	} catch(Exception e) { Lua.luaL_error( L,new Lua.CharPtr(e.ToString())); }
 	return 1;
   }
@@ -902,6 +1033,8 @@ public class impl_LunaTraits_LWF_Movie
         LunaTraits_LWF_Movie.properties["name"]=_bind_getName;
         LunaTraits_LWF_Movie.properties["parent"]=_bind_getParent;
         LunaTraits_LWF_Movie.properties["currentFrame"]=_bind_getCurrentFrame;
+        LunaTraits_LWF_Movie.properties["currentLabel"]=_bind_getCurrentLabel;
+        LunaTraits_LWF_Movie.properties["currentLabels"]=_bind_getCurrentLabels;
         LunaTraits_LWF_Movie.properties["totalFrames"]=_bind_getTotalFrames;
         LunaTraits_LWF_Movie.properties["visible"]=_bind_getVisible;
         LunaTraits_LWF_Movie.properties["x"]=_bind_getX;

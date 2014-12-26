@@ -22,6 +22,8 @@
 #define LWF_COCOS2DX_FACTORY_H
 
 #include "lwf_renderer.h"
+#include "renderer/CCCustomCommand.h"
+#include "renderer/CCRenderer.h"
 
 namespace cocos2d {
 class LWFNode;
@@ -30,6 +32,8 @@ class LWFMask;
 
 namespace LWF {
 
+class BlendEquationProtocol;
+
 class LWFRendererFactory : public IRendererFactory
 {
 protected:
@@ -37,6 +41,7 @@ protected:
 
 protected:
 	cocos2d::LWFNode *m_node;
+	string m_basePath;
 	Masks_t m_masks;
 	int m_blendMode;
 	int m_maskMode;
@@ -45,8 +50,9 @@ protected:
 	int m_renderingIndex;
 
 public:
-	LWFRendererFactory(cocos2d::LWFNode *node)
-		: m_node(node), m_blendMode(Format::BLEND_MODE_NORMAL),
+	LWFRendererFactory(cocos2d::LWFNode *node, string basePath)
+		: m_node(node), m_basePath(basePath),
+			m_blendMode(Format::BLEND_MODE_NORMAL),
 			m_maskMode(Format::BLEND_MODE_NORMAL),
 			m_lastMaskMode(Format::BLEND_MODE_NORMAL)
 	{
@@ -78,10 +84,32 @@ public:
 	void ScaleForHeight(LWF *lwf, float w, float h);
 	void ScaleForWidth(LWF *lwf, float w, float h);
 
-	bool Render(LWF *lwf, cocos2d::Node *node, int renderingIndex,
+	bool Render(LWF *lwf, cocos2d::Node *node,
+		BlendEquationProtocol *be, int renderingIndex,
 		bool visible, cocos2d::BlendFunc *baseBlendFunc = 0);
 
+	const string &GetBasePath() const {return m_basePath;}
 	cocos2d::LWFNode *GetNode() {return m_node;}
+};
+
+class BlendEquationProtocol
+{
+protected:
+	int m_blendEquation;
+	cocos2d::CustomCommand m_beginCommand;
+	cocos2d::CustomCommand m_endCommand;
+
+public:
+	BlendEquationProtocol();
+	virtual ~BlendEquationProtocol() {}
+
+	void setBlendEquation(int blendMode);
+	void addBeginCommand(cocos2d::Renderer *renderer,
+		const cocos2d::Mat4 &transform, uint32_t flags, float globalZOrder);
+	void addEndCommand(cocos2d::Renderer *renderer,
+		const cocos2d::Mat4 &transform, uint32_t flags, float globalZOrder);
+	void onBlendEquationBegin(const cocos2d::Mat4 &transform, uint32_t flags);
+	void onBlendEquationEnd(const cocos2d::Mat4 &transform, uint32_t flags);
 };
 
 }	// namespace LWF
