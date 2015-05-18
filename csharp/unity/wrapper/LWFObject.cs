@@ -52,6 +52,11 @@ class HandlerWrapper
 
 public class LWFObject : MonoBehaviour
 {
+	protected enum RendererType {
+		CombinedMeshRenderer,
+		DrawMeshRenderer,
+		UIVertexRenderer,
+	};
 	public LWF.LWF lwf;
 	public LWF.UnityRenderer.Factory factory;
 	public LWF.CombinedMeshRenderer.Factory combinedMeshRendererfactory;
@@ -78,7 +83,7 @@ public class LWFObject : MonoBehaviour
 	}
 
 	protected bool callUpdate;
-	protected bool useCombinedMeshRenderer;
+	protected RendererType rendererType;
 	protected bool executed;
 	protected LWFCallbacks lwfLoadCallbacks;
 	protected LWFCallbacks lwfDestroyCallbacks;
@@ -91,7 +96,7 @@ public class LWFObject : MonoBehaviour
 
 	public LWFObject()
 	{
-		useCombinedMeshRenderer = true;
+		rendererType = RendererType.CombinedMeshRenderer;
 		isAlive = true;
 		lwfLoadCallbacks = new LWFCallbacks();
 		lwfDestroyCallbacks = new LWFCallbacks();
@@ -113,12 +118,17 @@ public class LWFObject : MonoBehaviour
 
 	public void UseCombinedMeshRenderer()
 	{
-		useCombinedMeshRenderer = true;
+		rendererType = RendererType.CombinedMeshRenderer;
 	}
 
 	public void UseDrawMeshRenderer()
 	{
-		useCombinedMeshRenderer = false;
+		rendererType = RendererType.DrawMeshRenderer;
+	}
+
+	public void UseUIVertexRenderer()
+	{
+		rendererType = RendererType.UIVertexRenderer;
 	}
 
 	public void SetAutoUpdate(bool autoUpdate)
@@ -136,7 +146,8 @@ public class LWFObject : MonoBehaviour
 		LWFCallback lwfDestroyCallback = null,
 		LWFDataLoader lwfDataLoader = null,
 		TextureLoader textureLoader = null,
-		TextureUnloader textureUnloader = null
+		TextureUnloader textureUnloader = null,
+		string shaderName = "LWF"
 #if LWF_USE_LUA
 		, object luaState = null
 #endif
@@ -161,23 +172,30 @@ public class LWFObject : MonoBehaviour
 		if (lwfDataCallback != null && !lwfDataCallback(data))
 			return false;
 
-		if (useCombinedMeshRenderer
+		RendererType rt = rendererType;
 #if UNITY_EDITOR
-			&& Application.isPlaying
+		if (!Application.isPlaying && rt == RendererType.CombinedMeshRenderer)
+			rt = RendererType.DrawMeshRenderer;
 #endif
-		) {
+		if (rt == RendererType.CombinedMeshRenderer) {
 			combinedMeshRendererfactory = new LWF.CombinedMeshRenderer.Factory(
 				data, gameObject, zOffset, zRate, renderQueueOffset,
 				mSortingLayerName, mSortingOrder, useAdditionalColor,
 				renderCamera, inputCamera, texturePrefix, fontPrefix,
-				textureLoader, textureUnloader);
+				textureLoader, textureUnloader, shaderName);
 			factory = combinedMeshRendererfactory;
-		} else {
+		} else if (rt == RendererType.DrawMeshRenderer) {
 			factory = new LWF.DrawMeshRenderer.Factory(
 				data, gameObject, zOffset, zRate, renderQueueOffset,
 				mSortingLayerName, mSortingOrder, useAdditionalColor,
 				renderCamera, inputCamera, texturePrefix, fontPrefix,
-				textureLoader, textureUnloader);
+				textureLoader, textureUnloader, shaderName);
+		} else /*if (rt == RendererType.UIVertexRenderer)*/ {
+			factory = new LWF.UIVertexRenderer.Factory(
+				data, gameObject, zOffset, zRate, renderQueueOffset,
+				mSortingLayerName, mSortingOrder, useAdditionalColor,
+				renderCamera, inputCamera, texturePrefix, fontPrefix,
+				textureLoader, textureUnloader, shaderName);
 		}
 
 #if LWF_USE_LUA
@@ -198,24 +216,27 @@ public class LWFObject : MonoBehaviour
 				childTexturePrefix = Path.GetDirectoryName(childPath) + "/";
 
 			LWF.UnityRenderer.Factory f;
-			if (useCombinedMeshRenderer
-#if UNITY_EDITOR
-				&& Application.isPlaying
-#endif
-			) {
+			if (rt == RendererType.CombinedMeshRenderer) {
 				f = new LWF.CombinedMeshRenderer.Factory(
 					childData, gameObject, factory.zOffset, factory.zRate,
 					factory.renderQueueOffset, mSortingLayerName, mSortingOrder,
 					factory.useAdditionalColor, factory.renderCamera,
 					factory.inputCamera, childTexturePrefix, factory.fontPrefix,
-					factory.textureLoader, factory.textureUnloader, true);
-			} else {
+					factory.textureLoader, factory.textureUnloader, shaderName, true);
+			} else if (rt == RendererType.DrawMeshRenderer) {
 				f = new LWF.DrawMeshRenderer.Factory(
 					childData, gameObject, factory.zOffset, factory.zRate,
 					factory.renderQueueOffset, mSortingLayerName, mSortingOrder,
 					factory.useAdditionalColor, factory.renderCamera,
 					factory.inputCamera, childTexturePrefix, factory.fontPrefix,
-					factory.textureLoader, factory.textureUnloader);
+					factory.textureLoader, factory.textureUnloader, shaderName);
+			} else /*if (rt == RendererType.UIVertexRenderer)*/ {
+				f = new LWF.UIVertexRenderer.Factory(
+					childData, gameObject, factory.zOffset, factory.zRate,
+					factory.renderQueueOffset, mSortingLayerName, mSortingOrder,
+					factory.useAdditionalColor, factory.renderCamera,
+					factory.inputCamera, childTexturePrefix, factory.fontPrefix,
+					factory.textureLoader, factory.textureUnloader, shaderName);
 			}
 
 #if LWF_USE_LUA

@@ -23,7 +23,7 @@ using UnityEngine;
 using ResourceCache = LWF.UnityRenderer.ResourceCache;
 
 namespace LWF {
-namespace CombinedMeshRenderer {
+namespace UIVertexRenderer {
 
 public partial class Factory : IRendererFactory
 {
@@ -156,8 +156,8 @@ public class BitmapContext
 		m_vertices = new Vector3[]{
 			new Vector3(x1, y1, 0),
 			new Vector3(x1, y0, 0),
-			new Vector3(x0, y1, 0),
 			new Vector3(x0, y0, 0),
+			new Vector3(x0, y1, 0),
 		};
 
 		if (fragment.rotated == 0) {
@@ -168,8 +168,8 @@ public class BitmapContext
 			m_uv = new Vector2[]{
 				new Vector2(u1, v1),
 				new Vector2(u1, v0),
-				new Vector2(u0, v1),
 				new Vector2(u0, v0),
+				new Vector2(u0, v1),
 			};
 		} else {
 			float u0 = u / tw;
@@ -179,8 +179,8 @@ public class BitmapContext
 			m_uv = new Vector2[]{
 				new Vector2(u1, v0),
 				new Vector2(u0, v0),
-				new Vector2(u1, v1),
 				new Vector2(u0, v1),
+				new Vector2(u1, v1),
 			};
 		}
 	}
@@ -204,7 +204,7 @@ public class BitmapRenderer : Renderer, IMeshRenderer
 	int m_z;
 	int m_bufferIndex;
 	bool m_updated;
-	CombinedMeshBuffer m_buffer;
+	UIVertexBuffer m_buffer;
 
 	public BitmapRenderer(LWF lwf, BitmapContext context) : base(lwf)
 	{
@@ -280,14 +280,14 @@ public class BitmapRenderer : Renderer, IMeshRenderer
 		factory.Render(this, 1, material, m_colorAdd);
 	}
 
-	void IMeshRenderer.UpdateMesh(CombinedMeshBuffer buffer)
+	void IMeshRenderer.UpdateMesh(UIVertexBuffer buffer)
 	{
 		int bufferIndex = buffer.index++;
 
 		Color32 color32 = m_colorMult;
 
 		int index = bufferIndex * 4;
-		Color32 bc = buffer.colors32[index];
+		Color32 bc = buffer.vertices[index].color;
 		if (buffer.initialized ||
 				bc.r != color32.r ||
 				bc.g != color32.g ||
@@ -295,7 +295,7 @@ public class BitmapRenderer : Renderer, IMeshRenderer
 				bc.a != color32.a) {
 			buffer.modified = true;
 			for (int i = 0; i < 4; ++i)
-				buffer.colors32[index + i] = color32;
+				buffer.vertices[index + i].color = color32;
 		}
 
 		if (m_updated || m_buffer != buffer ||
@@ -304,13 +304,13 @@ public class BitmapRenderer : Renderer, IMeshRenderer
 			m_bufferIndex = bufferIndex;
 			buffer.modified = true;
 			for (int i = 0; i < 4; ++i) {
-				buffer.uv[index + i] = m_context.uv[i];
-				buffer.vertices[index + i] =
+				buffer.vertices[index + i].uv0 = m_context.uv[i];
+				buffer.vertices[index + i].position =
 					m_matrixForRender.MultiplyPoint3x4(m_context.vertices[i]);
 			}
 		}
 	}
 }
 
-}	// namespace CombinedMeshRenderer
+}	// namespace UIVertexRenderer
 }	// namespace LWF

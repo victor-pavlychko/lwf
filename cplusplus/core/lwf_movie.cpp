@@ -95,7 +95,7 @@ Movie::Movie(LWF *l, Movie *p, int objId, int instId, int mId, int cId,
 	m_attachMoviePostExeced = false;
 	m_isRoot = objId == lwf->data->header.rootMovieId;
 	m_requestedCalculateBounds = false;
-	m_calculateBoundsCallback = 0;
+	m_calculateBoundsCallback = nullptr;
 	m_currentLabelsCached = false;
 
 	m_displayList.resize(data->depths);
@@ -150,8 +150,8 @@ Point Movie::LocalToGlobal(const Point &point) const
 	return p;
 }
 
-void Movie::ExecObject(int dlDepth, int objId,
-	int matrixId, int colorTransformId, int instId, int dlBlendMode)
+void Movie::ExecObject(int dlDepth, int objId, int matrixId,
+	int colorTransformId, int instId, int dlBlendMode, bool updateBlendMode)
 {
 	// Ignore error
 	if (objId == -1)
@@ -184,6 +184,7 @@ void Movie::ExecObject(int dlDepth, int objId,
 		case OType::MOVIE:
 			obj = make_shared<Movie>(lwf, this,
 				dataObjectId, instId, matrixId, colorTransformId);
+			((Movie *)obj.get())->blendMode = dlBlendMode;
 			break;
 
 		case OType::BITMAP:
@@ -208,7 +209,7 @@ void Movie::ExecObject(int dlDepth, int objId,
 		}
 	}
 
-	if (obj->IsMovie())
+	if (obj->IsMovie() && updateBlendMode)
 		((Movie *)obj.get())->blendMode = dlBlendMode;
 
 	if (obj->IsMovie() || obj->IsButton()) {
@@ -628,9 +629,9 @@ void Movie::PostUpdate()
 
 	if (m_requestedCalculateBounds) {
 		m_currentBounds.xMin = FLT_MAX;
-		m_currentBounds.xMax = FLT_MIN;
+		m_currentBounds.xMax = -FLT_MAX;
 		m_currentBounds.yMin = FLT_MAX;
-		m_currentBounds.yMax = FLT_MIN;
+		m_currentBounds.yMax = -FLT_MAX;
 
 		Inspect(CalculateBoundsWrapper(this), 0, 0, 0);
 		if (lwf->property->hasMatrix) {
@@ -646,12 +647,13 @@ void Movie::PostUpdate()
 				px, py, m_currentBounds.xMax, m_currentBounds.yMax, &invert);
 			m_currentBounds.xMax = px;
 			m_currentBounds.yMax = py;
-			m_bounds = m_currentBounds;
-			m_requestedCalculateBounds = false;
-			if (m_calculateBoundsCallback) {
-				m_calculateBoundsCallback(this);
-				m_calculateBoundsCallback = 0;
-			}
+		}
+
+		m_bounds = m_currentBounds;
+		m_requestedCalculateBounds = false;
+		if (m_calculateBoundsCallback) {
+			m_calculateBoundsCallback(this);
+			m_calculateBoundsCallback = nullptr;
 		}
 	}
 
@@ -1235,10 +1237,26 @@ void Movie::RemoveEventHandler(string eventName, int id)
 	list.erase(remove_if(list.begin(), list.end(), Pred(id)), list.end());
 }
 
+void Movie::RemoveMovieEventHandler(int id)
+{
+	m_handler.Remove(id);
+}
+
 void Movie::ClearEventHandler(string eventName)
 {
 	m_eventHandlers.erase(eventName);
 	m_handler.Clear(eventName);
+}
+
+void Movie::ClearMovieEventHandler()
+{
+	m_handler.Clear();
+}
+
+void Movie::ClearAllEventHandler()
+{
+	m_eventHandlers.clear();
+	m_handler.Clear();
 }
 
 int Movie::SetEventHandler(string eventName, MovieEventHandler eventHandler)

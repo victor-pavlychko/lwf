@@ -3,7 +3,7 @@
 // Copyright (c) 2001 Robert Penner - http://goo.gl/Qjqc0
 // Copyright (c) 2011 Gary Linscott
 // Copyright (c) 2011-2012 Juan Mellado
-// Copyright (c) 2013 C. Scott Ananian - http://git.io/QzutCQ
+// Copyright (c) 2013 C. Scott Ananian - http://git.io/vUHSG
 // Copyright (c) 2012 imaya - http://git.io/cC8gDw
 if (typeof global === "undefined" && typeof window !== "undefined") {
 	/* Browsers */
@@ -2999,8 +2999,8 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
           this.prevInstance.nextInstance = this.nextInstance;
         }
       }
-      if ((this.name != null) && (typeof parent !== "undefined" && parent !== null)) {
-        delete parent[this.name];
+      if ((this.name != null) && (this.parent != null)) {
+        delete this.parent[this.name];
       }
       this.prevInstance = null;
       this.nextInstance = null;
@@ -4186,8 +4186,32 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
       }
     };
 
-    Movie.prototype.execObject = function(depth, objId, matrixId, colorTransformId, instId, blendMode) {
+    Movie.prototype.setBlendMode = function(obj, blendMode) {
+      switch (blendMode) {
+        case Format.Constant.BLEND_MODE_NORMAL:
+          return obj.blendMode = "normal";
+        case Format.Constant.BLEND_MODE_ADD:
+          return obj.blendMode = "add";
+        case Format.Constant.BLEND_MODE_ERASE:
+          return obj.blendMode = "erase";
+        case Format.Constant.BLEND_MODE_LAYER:
+          return obj.blendMode = "layer";
+        case Format.Constant.BLEND_MODE_MASK:
+          return obj.blendMode = "mask";
+        case Format.Constant.BLEND_MODE_MULTIPLY:
+          return obj.blendMode = "multiply";
+        case Format.Constant.BLEND_MODE_SCREEN:
+          return obj.blendMode = "screen";
+        case Format.Constant.BLEND_MODE_SUBTRACT:
+          return obj.blendMode = "subtract";
+      }
+    };
+
+    Movie.prototype.execObject = function(depth, objId, matrixId, colorTransformId, instId, blendMode, updateBlendMode) {
       var data, dataObject, dataObjectId, obj;
+      if (updateBlendMode == null) {
+        updateBlendMode = false;
+      }
       if (objId === -1) {
         return;
       }
@@ -4209,6 +4233,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
             break;
           case Type.MOVIE:
             obj = new Movie(this.lwf, this, dataObjectId, instId, matrixId, colorTransformId);
+            this.setBlendMode(obj, blendMode);
             break;
           case Type.BITMAP:
             obj = new Bitmap(this.lwf, this, dataObjectId);
@@ -4226,32 +4251,8 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
             obj = new ProgramObject(this.lwf, this, dataObjectId);
         }
       }
-      if (obj.isMovie) {
-        switch (blendMode) {
-          case Format.Constant.BLEND_MODE_NORMAL:
-            obj.blendMode = "normal";
-            break;
-          case Format.Constant.BLEND_MODE_ADD:
-            obj.blendMode = "add";
-            break;
-          case Format.Constant.BLEND_MODE_ERASE:
-            obj.blendMode = "erase";
-            break;
-          case Format.Constant.BLEND_MODE_LAYER:
-            obj.blendMode = "layer";
-            break;
-          case Format.Constant.BLEND_MODE_MASK:
-            obj.blendMode = "mask";
-            break;
-          case Format.Constant.BLEND_MODE_MULTIPLY:
-            obj.blendMode = "multiply";
-            break;
-          case Format.Constant.BLEND_MODE_SCREEN:
-            obj.blendMode = "screen";
-            break;
-          case Format.Constant.BLEND_MODE_SUBTRACT:
-            obj.blendMode = "subtract";
-        }
+      if (obj.isMovie && updateBlendMode) {
+        this.setBlendMode(obj, blendMode);
       }
       if (obj.isMovie || obj.isButton) {
         obj.linkInstance = null;
@@ -4377,7 +4378,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
               case ControlType.MOVEMCB:
                 ctrl = data.controlMoveMCBs[control.controlId];
                 p = data.places[ctrl.placeId];
-                this.execObject(p.depth, p.objectId, ctrl.matrixId, ctrl.colorTransformId, p.instanceId, ctrl.blendMode);
+                this.execObject(p.depth, p.objectId, ctrl.matrixId, ctrl.colorTransformId, p.instanceId, ctrl.blendMode, true);
                 break;
               case ControlType.ANIMATION:
                 if (controlAnimationOffset === -1) {
@@ -5884,6 +5885,19 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
       this.rendererFactory.init(this);
     };
 
+    LWF.prototype.getRendererFactory = function() {
+      var parent;
+      if (this.parent != null) {
+        parent = this.parent;
+        while (parent.parent != null) {
+          parent = parent.parent;
+        }
+        return parent.lwf.rendererFactory;
+      } else {
+        return this.rendererFactory;
+      }
+    };
+
     LWF.prototype.setFrameRate = function(frameRate) {
       if (frameRate === 0) {
         return;
@@ -5956,23 +5970,39 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     };
 
     LWF.prototype.beginBlendMode = function(blendMode) {
-      this.blendModes.unshift(blendMode);
-      this.rendererFactory.setBlendMode(blendMode);
+      if (this.parent != null) {
+        this.parent.lwf.beginBlendMode(blendMode);
+      } else {
+        this.blendModes.unshift(blendMode);
+        this.rendererFactory.setBlendMode(blendMode);
+      }
     };
 
     LWF.prototype.endBlendMode = function() {
-      this.blendModes.shift();
-      this.rendererFactory.setBlendMode(this.blendModes.length > 0 ? this.blendModes[0] : "normal");
+      if (this.parent != null) {
+        this.parent.lwf.endBlendMode();
+      } else {
+        this.blendModes.shift();
+        this.rendererFactory.setBlendMode(this.blendModes.length > 0 ? this.blendModes[0] : "normal");
+      }
     };
 
     LWF.prototype.beginMaskMode = function(maskMode) {
-      this.maskModes.unshift(maskMode);
-      this.rendererFactory.setMaskMode(maskMode);
+      if (this.parent != null) {
+        this.parent.lwf.beginMaskMode(maskMode);
+      } else {
+        this.maskModes.unshift(maskMode);
+        this.rendererFactory.setMaskMode(maskMode);
+      }
     };
 
     LWF.prototype.endMaskMode = function() {
-      this.maskModes.shift();
-      this.rendererFactory.setMaskMode(this.maskModes.length > 0 ? this.maskModes[0] : "normal");
+      if (this.parent != null) {
+        this.parent.lwf.endMaskMode();
+      } else {
+        this.maskModes.shift();
+        this.rendererFactory.setMaskMode(this.maskModes.length > 0 ? this.maskModes[0] : "normal");
+      }
     };
 
     LWF.prototype.setAttachVisible = function(visible) {

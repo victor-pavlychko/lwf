@@ -3,7 +3,7 @@
 // Copyright (c) 2001 Robert Penner - http://goo.gl/Qjqc0
 // Copyright (c) 2011 Gary Linscott
 // Copyright (c) 2011-2012 Juan Mellado
-// Copyright (c) 2013 C. Scott Ananian - http://git.io/QzutCQ
+// Copyright (c) 2013 C. Scott Ananian - http://git.io/vUHSG
 // Copyright (c) 2012 imaya - http://git.io/cC8gDw
 if (typeof global === "undefined" && typeof window !== "undefined") {
 	/* Browsers */
@@ -2996,8 +2996,8 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
           this.prevInstance.nextInstance = this.nextInstance;
         }
       }
-      if ((this.name != null) && (typeof parent !== "undefined" && parent !== null)) {
-        delete parent[this.name];
+      if ((this.name != null) && (this.parent != null)) {
+        delete this.parent[this.name];
       }
       this.prevInstance = null;
       this.nextInstance = null;
@@ -4183,8 +4183,32 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
       }
     };
 
-    Movie.prototype.execObject = function(depth, objId, matrixId, colorTransformId, instId, blendMode) {
+    Movie.prototype.setBlendMode = function(obj, blendMode) {
+      switch (blendMode) {
+        case Format.Constant.BLEND_MODE_NORMAL:
+          return obj.blendMode = "normal";
+        case Format.Constant.BLEND_MODE_ADD:
+          return obj.blendMode = "add";
+        case Format.Constant.BLEND_MODE_ERASE:
+          return obj.blendMode = "erase";
+        case Format.Constant.BLEND_MODE_LAYER:
+          return obj.blendMode = "layer";
+        case Format.Constant.BLEND_MODE_MASK:
+          return obj.blendMode = "mask";
+        case Format.Constant.BLEND_MODE_MULTIPLY:
+          return obj.blendMode = "multiply";
+        case Format.Constant.BLEND_MODE_SCREEN:
+          return obj.blendMode = "screen";
+        case Format.Constant.BLEND_MODE_SUBTRACT:
+          return obj.blendMode = "subtract";
+      }
+    };
+
+    Movie.prototype.execObject = function(depth, objId, matrixId, colorTransformId, instId, blendMode, updateBlendMode) {
       var data, dataObject, dataObjectId, obj;
+      if (updateBlendMode == null) {
+        updateBlendMode = false;
+      }
       if (objId === -1) {
         return;
       }
@@ -4206,6 +4230,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
             break;
           case Type.MOVIE:
             obj = new Movie(this.lwf, this, dataObjectId, instId, matrixId, colorTransformId);
+            this.setBlendMode(obj, blendMode);
             break;
           case Type.BITMAP:
             obj = new Bitmap(this.lwf, this, dataObjectId);
@@ -4223,32 +4248,8 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
             obj = new ProgramObject(this.lwf, this, dataObjectId);
         }
       }
-      if (obj.isMovie) {
-        switch (blendMode) {
-          case Format.Constant.BLEND_MODE_NORMAL:
-            obj.blendMode = "normal";
-            break;
-          case Format.Constant.BLEND_MODE_ADD:
-            obj.blendMode = "add";
-            break;
-          case Format.Constant.BLEND_MODE_ERASE:
-            obj.blendMode = "erase";
-            break;
-          case Format.Constant.BLEND_MODE_LAYER:
-            obj.blendMode = "layer";
-            break;
-          case Format.Constant.BLEND_MODE_MASK:
-            obj.blendMode = "mask";
-            break;
-          case Format.Constant.BLEND_MODE_MULTIPLY:
-            obj.blendMode = "multiply";
-            break;
-          case Format.Constant.BLEND_MODE_SCREEN:
-            obj.blendMode = "screen";
-            break;
-          case Format.Constant.BLEND_MODE_SUBTRACT:
-            obj.blendMode = "subtract";
-        }
+      if (obj.isMovie && updateBlendMode) {
+        this.setBlendMode(obj, blendMode);
       }
       if (obj.isMovie || obj.isButton) {
         obj.linkInstance = null;
@@ -4374,7 +4375,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
               case ControlType.MOVEMCB:
                 ctrl = data.controlMoveMCBs[control.controlId];
                 p = data.places[ctrl.placeId];
-                this.execObject(p.depth, p.objectId, ctrl.matrixId, ctrl.colorTransformId, p.instanceId, ctrl.blendMode);
+                this.execObject(p.depth, p.objectId, ctrl.matrixId, ctrl.colorTransformId, p.instanceId, ctrl.blendMode, true);
                 break;
               case ControlType.ANIMATION:
                 if (controlAnimationOffset === -1) {
@@ -5881,6 +5882,19 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
       this.rendererFactory.init(this);
     };
 
+    LWF.prototype.getRendererFactory = function() {
+      var parent;
+      if (this.parent != null) {
+        parent = this.parent;
+        while (parent.parent != null) {
+          parent = parent.parent;
+        }
+        return parent.lwf.rendererFactory;
+      } else {
+        return this.rendererFactory;
+      }
+    };
+
     LWF.prototype.setFrameRate = function(frameRate) {
       if (frameRate === 0) {
         return;
@@ -5953,23 +5967,39 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     };
 
     LWF.prototype.beginBlendMode = function(blendMode) {
-      this.blendModes.unshift(blendMode);
-      this.rendererFactory.setBlendMode(blendMode);
+      if (this.parent != null) {
+        this.parent.lwf.beginBlendMode(blendMode);
+      } else {
+        this.blendModes.unshift(blendMode);
+        this.rendererFactory.setBlendMode(blendMode);
+      }
     };
 
     LWF.prototype.endBlendMode = function() {
-      this.blendModes.shift();
-      this.rendererFactory.setBlendMode(this.blendModes.length > 0 ? this.blendModes[0] : "normal");
+      if (this.parent != null) {
+        this.parent.lwf.endBlendMode();
+      } else {
+        this.blendModes.shift();
+        this.rendererFactory.setBlendMode(this.blendModes.length > 0 ? this.blendModes[0] : "normal");
+      }
     };
 
     LWF.prototype.beginMaskMode = function(maskMode) {
-      this.maskModes.unshift(maskMode);
-      this.rendererFactory.setMaskMode(maskMode);
+      if (this.parent != null) {
+        this.parent.lwf.beginMaskMode(maskMode);
+      } else {
+        this.maskModes.unshift(maskMode);
+        this.rendererFactory.setMaskMode(maskMode);
+      }
     };
 
     LWF.prototype.endMaskMode = function() {
-      this.maskModes.shift();
-      this.rendererFactory.setMaskMode(this.maskModes.length > 0 ? this.maskModes[0] : "normal");
+      if (this.parent != null) {
+        this.parent.lwf.endMaskMode();
+      } else {
+        this.maskModes.shift();
+        this.rendererFactory.setMaskMode(this.maskModes.length > 0 ? this.maskModes[0] : "normal");
+      }
     };
 
     LWF.prototype.setAttachVisible = function(visible) {
@@ -7838,12 +7868,8 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     };
 
     WebkitCSSRendererFactory.prototype.addCommandToParent = function(lwf) {
-      var cmd, f, parent, rIndex, renderCount, scmd, srIndex, subCommands, _i, _j, _ref, _ref1;
-      parent = lwf.parent;
-      while (parent.parent != null) {
-        parent = parent.parent;
-      }
-      f = parent.lwf.rendererFactory;
+      var cmd, f, rIndex, renderCount, scmd, srIndex, subCommands, _i, _j, _ref, _ref1;
+      f = lwf.getRendererFactory();
       renderCount = lwf.renderCount;
       for (rIndex = _i = 0, _ref = this.commands.length; 0 <= _ref ? _i < _ref : _i > _ref; rIndex = 0 <= _ref ? ++_i : --_i) {
         cmd = this.commands[rIndex];
@@ -7943,14 +7969,6 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     };
 
     WebkitCSSRendererFactory.prototype.beginRender = function(lwf) {
-      var f;
-      if (lwf.parent != null) {
-        f = lwf.parent.lwf.rendererFactory;
-        if (f.blendMode != null) {
-          this.blendMode = f.blendMode;
-        }
-        this.maskMode = f.maskMode;
-      }
       if (this.destructedRenderers != null) {
         this.callRendererDestructor();
       }
@@ -10058,7 +10076,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
             ctx = this.stageContext;
             this.resetGlobalCompositeOperation(ctx);
             if (this.renderMaskMode === "layer" && this.renderMasked) {
-              this.renderMask(cmd.blendMode);
+              this.renderMask(this.renderBlendMode);
             }
         }
         this.renderMaskMode = cmd.maskMode;
@@ -10274,7 +10292,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     CanvasBitmapRenderer.prototype.destruct = function() {};
 
     CanvasBitmapRenderer.prototype.render = function(m, c, renderingIndex, renderingCount, visible) {
-      var cmd, fragment, scale, x, y;
+      var cmd, f, fragment, scale, x, y;
       if (!visible || c.multi.alpha === 0) {
         return;
       }
@@ -10295,11 +10313,12 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
         }
       }
       this.alpha = c.multi.alpha;
+      f = this.context.factory.lwf.getRendererFactory();
       fragment = this.context.fragment;
       cmd = this.cmd;
       cmd.alpha = this.alpha;
-      cmd.blendMode = this.context.factory.blendMode;
-      cmd.maskMode = this.context.factory.maskMode;
+      cmd.blendMode = f.blendMode;
+      cmd.maskMode = f.maskMode;
       cmd.matrix = m;
       cmd.image = this.context.image;
       cmd.pattern = this.context.pattern;
@@ -10334,15 +10353,16 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     }
 
     CanvasTextRenderer.prototype.render = function(m, c, renderingIndex, renderingCount, visible) {
-      var cmd;
+      var cmd, f;
       if (!visible || c.multi.alpha === 0) {
         return;
       }
       CanvasTextRenderer.__super__.render.call(this, m, c, renderingIndex, renderingCount, visible);
+      f = this.context.factory.lwf.getRendererFactory();
       cmd = this.cmd;
       cmd.alpha = c.multi.alpha;
-      cmd.blendMode = this.context.factory.blendMode;
-      cmd.maskMode = this.context.factory.maskMode;
+      cmd.blendMode = f.blendMode;
+      cmd.maskMode = f.maskMode;
       cmd.matrix = this.matrix;
       cmd.image = this.canvas;
       cmd.pattern = null;
@@ -10539,7 +10559,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     WebGLShader.prototype.use = function(gl, pMatrix) {
       var vertexBufferSize;
       gl.useProgram(this.shaderProgram);
-      gl.uniformMatrix4fv(this.uPMatrix, false, pMatrix);
+      this.setMatrix(gl, pMatrix);
       vertexBufferSize = 4 * this.attributes;
       gl.vertexAttribPointer(this.aVertexPosition, 2, gl.FLOAT, false, vertexBufferSize, 0);
       gl.enableVertexAttribArray(this.aVertexPosition);
@@ -10555,6 +10575,10 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
         gl.enableVertexAttribArray(this.aAdditionalColor);
       }
       return this;
+    };
+
+    WebGLShader.prototype.setMatrix = function(gl, pMatrix) {
+      gl.uniformMatrix4fv(this.uPMatrix, false, pMatrix);
     };
 
     WebGLShader.prototype.disable = function(gl) {
@@ -10598,7 +10622,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
         this.stage.height = this.data.header.height;
       }
       params = {
-        alpha: true,
+        alpha: false,
         antialias: false,
         depth: false,
         premultipliedAlpha: true,
@@ -10659,9 +10683,9 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     };
 
     WebGLRendererFactory.prototype.setViewport = function(gl, lwf) {
-      var bottom, changed, far, left, near, right, top;
-      changed = this.propertyMatrix.setWithComparing(lwf.property.matrix);
-      if ((this.pMatrix == null) || changed || this.w !== this.stage.width || this.h !== this.stage.height) {
+      var bottom, far, left, near, right, top;
+      this.viewportChanged = this.propertyMatrix.setWithComparing(lwf.property.matrix);
+      if ((this.pMatrix == null) || this.viewportChanged || this.w !== this.stage.width || this.h !== this.stage.height) {
         this.w = this.stage.width;
         this.h = this.stage.height;
         gl.viewport(0, 0, this.w, this.h);
@@ -10781,7 +10805,7 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
       if (this.setSrcFactor !== blendSrcFactor || this.setDstFactor !== blendDstFactor) {
         this.setSrcFactor = blendSrcFactor;
         this.setDstFactor = blendDstFactor;
-        gl.blendFuncSeparate(blendSrcFactor, blendDstFactor, gl.ONE, gl.ONE);
+        gl.blendFunc(blendSrcFactor, blendDstFactor);
       }
       if (this.setEquation !== blendEquation) {
         this.setEquation = blendEquation;
@@ -10981,6 +11005,8 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
             this.currentShader.disable(gl);
           }
           this.currentShader = shader.use(gl, this.pMatrix);
+        } else if (this.viewportChanged) {
+          this.currentShader.setMatrix(gl, this.pMatrix);
         }
       }
 
@@ -11371,16 +11397,17 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     WebGLBitmapRenderer.prototype.destruct = function() {};
 
     WebGLBitmapRenderer.prototype.render = function(m, c, renderingIndex, renderingCount, visible) {
-      var cmd, factory;
+      var cmd, f, factory;
       if (!visible || c.multi.alpha === 0) {
         return;
       }
+      f = this.context.factory.lwf.getRendererFactory();
       factory = this.context.factory;
       cmd = this.cmd;
       cmd.matrix = m;
       cmd.colorTransform = c;
-      cmd.blendMode = factory.blendMode;
-      cmd.maskMode = factory.maskMode;
+      cmd.blendMode = f.blendMode;
+      cmd.maskMode = f.maskMode;
       factory.addCommand(renderingIndex, cmd);
     };
 
@@ -11496,17 +11523,18 @@ if (typeof global === "undefined" && typeof window !== "undefined") {
     };
 
     WebGLTextRenderer.prototype.render = function(m, c, renderingIndex, renderingCount, visible) {
-      var cmd, factory;
+      var cmd, f, factory;
       if (!visible || c.multi.alpha === 0) {
         return;
       }
       WebGLTextRenderer.__super__.render.call(this, m, c, renderingIndex, renderingCount, visible);
+      f = this.context.factory.lwf.getRendererFactory();
       factory = this.context.factory;
       cmd = this.cmd;
       cmd.texture = this.texture;
       cmd.colorTransform = c;
-      cmd.blendMode = factory.blendMode;
-      cmd.maskMode = factory.maskMode;
+      cmd.blendMode = f.blendMode;
+      cmd.maskMode = f.maskMode;
       factory.addCommand(renderingIndex, cmd);
     };
 

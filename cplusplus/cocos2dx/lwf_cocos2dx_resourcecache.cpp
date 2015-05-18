@@ -27,12 +27,20 @@
 #include "lwf_cocos2dx_resourcecache.h"
 #include "lwf_data.h"
 #include "lwf_core.h"
-#include <regex>
 #include <cstdlib>
+
+#include "lwf_compat.h"
 
 #if (CC_TARGET_PLATFORM == CC_PLATFORM_ANDROID)
 # include "base/CCEventDispatcher.h"
 # include "base/CCEventType.h"
+#endif
+
+#ifndef LWF_USE_IMAGECOLORIZE
+# define LWF_USE_IMAGECOLORIZE 1
+#endif
+#if LWF_USE_IMAGECOLORIZE
+# include <regex>
 #endif
 
 #define STRINGIFY(A)  #A
@@ -143,6 +151,7 @@ shared_ptr<LWFData> LWFResourceCache::loadLWFData(const string &path)
 	return data;
 }
 
+#if LWF_USE_IMAGECOLORIZE
 static void checkImagePath(const char *file, string &imagePath,
 	bool &toRGB, bool &toRGBA, bool &toADD, unsigned char &red,
 	unsigned char &green, unsigned char &blue, unsigned char &alpha)
@@ -174,50 +183,50 @@ static void checkImagePath(const char *file, string &imagePath,
 	smatch match;
 	if (strcasestr(file, "_rgb_") != 0) {
 		if (regex_match(imagePath, match, eRGB)) {
-			imagePath = match[1].str() + match[3].str();
 			toRGB = true;
 			string rgbHex = match[2].str();
 			red = strtoul(rgbHex.substr(0, 2).c_str(), 0, 16);
 			green = strtoul(rgbHex.substr(2, 2).c_str(), 0, 16);
 			blue = strtoul(rgbHex.substr(4, 2).c_str(), 0, 16);
+			imagePath = match[1].str() + match[3].str();
 		} else if (regex_match(imagePath, match, eRGB10)) {
-			imagePath = match[1].str() + match[5].str();
 			toRGB = true;
 			red = strtoul(match[2].str().c_str(), 0, 10);
 			green = strtoul(match[3].str().c_str(), 0, 10);
 			blue = strtoul(match[4].str().c_str(), 0, 10);
+			imagePath = match[1].str() + match[5].str();
 		}
 	} else if (strcasestr(file, "_rgba_") != 0) {
 		if (regex_match(imagePath, match, eRGBA)) {
-			imagePath = match[1].str() + match[3].str();
 			toRGBA = true;
 			string rgbaHex = match[2].str();
 			red = strtoul(rgbaHex.substr(0, 2).c_str(), 0, 16);
 			green = strtoul(rgbaHex.substr(2, 2).c_str(), 0, 16);
 			blue = strtoul(rgbaHex.substr(4, 2).c_str(), 0, 16);
 			alpha = strtoul(rgbaHex.substr(6, 2).c_str(), 0, 16);
+			imagePath = match[1].str() + match[3].str();
 		} else if (regex_match(imagePath, match, eRGBA10)) {
-			imagePath = match[1].str() + match[6].str();
 			toRGBA = true;
 			red = strtoul(match[2].str().c_str(), 0, 10);
 			green = strtoul(match[3].str().c_str(), 0, 10);
 			blue = strtoul(match[4].str().c_str(), 0, 10);
 			alpha = strtoul(match[5].str().c_str(), 0, 10);
+			imagePath = match[1].str() + match[6].str();
 		}
 	} else if (strcasestr(file, "_add_") != 0) {
 		if (regex_match(imagePath, match, eADD)) {
-			imagePath = match[1].str() + match[3].str();
 			toADD = true;
 			string rgbHex = match[2].str();
 			red = strtoul(rgbHex.substr(0, 2).c_str(), 0, 16);
 			green = strtoul(rgbHex.substr(2, 2).c_str(), 0, 16);
 			blue = strtoul(rgbHex.substr(4, 2).c_str(), 0, 16);
+			imagePath = match[1].str() + match[3].str();
 		} else if (regex_match(imagePath, match, eADD10)) {
-			imagePath = match[1].str() + match[5].str();
 			toADD = true;
 			red = strtoul(match[2].str().c_str(), 0, 10);
 			green = strtoul(match[3].str().c_str(), 0, 10);
 			blue = strtoul(match[4].str().c_str(), 0, 10);
+			imagePath = match[1].str() + match[5].str();
 		}
 	}
 }
@@ -406,9 +415,14 @@ static void colorImage(string imagePath, Image *image, bool toRGB,
 		break;
 	}
 }
+#endif
 
 Texture2D *LWFResourceCache::addImage(const char *file)
 {
+	TextureCache *cache = Director::getInstance()->getTextureCache();
+	Texture2D *texture = 0;
+
+#if LWF_USE_IMAGECOLORIZE
 	string imagePath;
 	bool toRGB;
 	bool toRGBA;
@@ -420,9 +434,6 @@ Texture2D *LWFResourceCache::addImage(const char *file)
 
 	checkImagePath(file,
 		imagePath, toRGB, toRGBA, toADD, red, green, blue, alpha);
-
-	TextureCache *cache = Director::getInstance()->getTextureCache();
-	Texture2D *texture = 0;
 
 	if (toRGB || toRGBA || toADD) {
 		texture = cache->getTextureForKey(file);
@@ -456,6 +467,9 @@ Texture2D *LWFResourceCache::addImage(const char *file)
 	} else {
 		texture = cache->addImage(imagePath);
 	}
+#else
+	texture = cache->addImage(file);
+#endif
 
 	return texture;
 }
@@ -576,29 +590,28 @@ LWFTextRendererContext LWFResourceCache::getTextRendererContext(
 	FileUtils *fileUtils = FileUtils::getInstance();
 	string fontPath = getFontPathPrefix() + font;
 
-	static regex eFnt(".*\\.fnt$", regex_constants::icase);
-	if (regex_match(font, eFnt)) {
+	const char *p = font.c_str() + font.size() - 4;
+	if (strncasecmp(p, ".fnt", 4) == 0) {
 		LWFTextRendererContext c(LWFTextRendererContext::BMFONT, fontPath);
 		m_textRendererCache[font] = c;
 		return c;
 	}
 
-	static regex eTtf(".*\\.ttf$", regex_constants::icase);
-	if (regex_match(font, eTtf)) {
+	if (strncasecmp(p, ".ttf", 4) == 0) {
 		LWFTextRendererContext c(LWFTextRendererContext::TTF, fontPath);
 		m_textRendererCache[font] = c;
 		return c;
 	}
 
 	fontPath = getFontPathPrefix() + font + ".fnt";
-	if (fileUtils->isFileExist(font)) {
+	if (fileUtils->isFileExist(fontPath)) {
 		LWFTextRendererContext c(LWFTextRendererContext::BMFONT, fontPath);
 		m_textRendererCache[font] = c;
 		return c;
 	}
 
 	fontPath = getFontPathPrefix() + font + ".ttf";
-	if (fileUtils->isFileExist(font)) {
+	if (fileUtils->isFileExist(fontPath)) {
 		LWFTextRendererContext c(LWFTextRendererContext::TTF, fontPath);
 		m_textRendererCache[font] = c;
 		return c;

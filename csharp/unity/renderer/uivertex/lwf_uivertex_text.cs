@@ -22,7 +22,7 @@ using UnityEngine;
 using System.Collections.Generic;
 
 namespace LWF {
-namespace CombinedMeshRenderer {
+namespace UIVertexRenderer {
 
 public class TextMeshRenderer : UnityRenderer.UnityTextRenderer, IMeshRenderer
 {
@@ -34,7 +34,7 @@ public class TextMeshRenderer : UnityRenderer.UnityTextRenderer, IMeshRenderer
 	int m_z;
 	int m_bufferIndex;
 	bool m_updated;
-	CombinedMeshBuffer m_buffer;
+	UIVertexBuffer m_buffer;
 
 	public TextMeshRenderer(LWF lwf, UnityRenderer.TextContext context)
 		: base(lwf, context)
@@ -81,7 +81,7 @@ public class TextMeshRenderer : UnityRenderer.UnityTextRenderer, IMeshRenderer
 			m_context.settings.font.material, m_colorAdd);
 	}
 
-	void IMeshRenderer.UpdateMesh(CombinedMeshBuffer buffer)
+	void IMeshRenderer.UpdateMesh(UIVertexBuffer buffer)
 	{
 		int bufferIndex = buffer.index;
 		int vertexCount = m_vertices.Length;
@@ -89,14 +89,14 @@ public class TextMeshRenderer : UnityRenderer.UnityTextRenderer, IMeshRenderer
 
 		for (int i = bufferIndex; i < buffer.index; ++i) {
 			int cIndex = i * 4;
-			var bc = buffer.colors32[cIndex];
+			var bc = buffer.vertices[cIndex].color;
 			if (bc.r != m_color.r ||
 					bc.g != m_color.g ||
 					bc.b != m_color.b ||
 					bc.a != m_color.a) {
 				buffer.modified = true;
 				for (int j = 0; j < 4; ++j)
-					buffer.colors32[cIndex + j] = m_color;
+					buffer.vertices[cIndex + j].color = m_color;
 			}
 		}
 
@@ -107,13 +107,13 @@ public class TextMeshRenderer : UnityRenderer.UnityTextRenderer, IMeshRenderer
 			buffer.modified = true;
 			int index = bufferIndex * 4;
 			for (int i = 0; i < vertexCount; ++i) {
-				buffer.uv[index + i] = m_uv[i];
-				buffer.vertices[index + i] =
+				buffer.vertices[index + i].uv0 = m_uv[i];
+				buffer.vertices[index + i].position =
 					m_matrixForRender.MultiplyPoint3x4(m_vertices[i]);
 			}
 		}
 	}
 }
 
-}	// namespace CombinedMeshRenderer
+}	// namespace UIVertexRenderer
 }	// namespace LWF

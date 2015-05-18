@@ -27,52 +27,35 @@ using TextureLoader = System.Func<string, UnityEngine.Texture2D>;
 using TextureUnloader = System.Action<UnityEngine.Texture2D>;
 
 namespace LWF {
-namespace CombinedMeshRenderer {
+namespace UIVertexRenderer {
 
-public class CombinedMeshBuffer
+public class UIVertexBuffer
 {
-	public Vector3[] vertices;
-	public Vector2[] uv;
-	public int[] triangles;
-	public Color32[] colors32;
+	public UIVertex[] vertices;
 	public int index;
 	public bool modified;
 	public bool initialized;
 
 	public void Alloc(int n)
 	{
-		vertices = new Vector3[n * 4];
-		uv = new Vector2[n * 4];
-		triangles = new int[n * 6];
-		colors32 = new Color32[n * 4];
+		vertices = new UIVertex[n * 4];
 		index = 0;
 		modified = true;
 		initialized = true;
-
-		for (int i = 0, j = 0; i < triangles.Length; i += 6, j += 4) {
-			triangles[i + 0] = j + 0;
-			triangles[i + 1] = j + 1;
-			triangles[i + 2] = j + 2;
-			triangles[i + 3] = j + 2;
-			triangles[i + 4] = j + 1;
-			triangles[i + 5] = j + 3;
-		}
 	}
 }
 
 public interface IMeshRenderer
 {
-	void UpdateMesh(CombinedMeshBuffer buffer);
+	void UpdateMesh(UIVertexBuffer buffer);
 }
 
-public class CombinedMeshComponent : MonoBehaviour
+public class UIVertexComponent : MonoBehaviour
 {
 	public int updateCount;
-	public UnityEngine.MeshRenderer meshRenderer;
-	public MeshFilter meshFilter;
+	public UnityEngine.CanvasRenderer canvasRenderer;
 	public MaterialPropertyBlock property;
-	public CombinedMeshBuffer buffer;
-	public Mesh mesh;
+	public UIVertexBuffer buffer;
 	public UnityEngine.Color additionalColor;
 	public List<IMeshRenderer> renderers;
 	public int rendererCount;
@@ -83,21 +66,7 @@ public class CombinedMeshComponent : MonoBehaviour
 	{
 		renderers = new List<IMeshRenderer>();
 
-		mesh = new Mesh();
-		mesh.name = "LWF/" + factory.data.name;
-		mesh.MarkDynamic();
-
-		meshFilter = gameObject.AddComponent<MeshFilter>();
-		meshFilter.sharedMesh = mesh;
-
-		meshRenderer = gameObject.AddComponent<UnityEngine.MeshRenderer>();
-#if UNITY_4_6
-		meshRenderer.castShadows = false;
-#else
-		meshRenderer.shadowCastingMode =
-			UnityEngine.Rendering.ShadowCastingMode.Off;
-#endif
-		meshRenderer.receiveShadows = false;
+		canvasRenderer = gameObject.AddComponent<UnityEngine.CanvasRenderer>();
 		UpdateSortingLayerAndOrder(factory);
 		UpdateLayer(factory);
 
@@ -107,13 +76,13 @@ public class CombinedMeshComponent : MonoBehaviour
 			additionalColorId = Shader.PropertyToID("_AdditionalColor");
 		}
 
-		buffer = new CombinedMeshBuffer();
+		buffer = new UIVertexBuffer();
 	}
 
 	public void UpdateSortingLayerAndOrder(Factory factory)
 	{
-		meshRenderer.sortingLayerName = factory.sortingLayerName;
-		meshRenderer.sortingOrder = factory.sortingOrder;
+		//canvasRenderer.sortingLayerName = factory.sortingLayerName;
+		//canvasRenderer.sortingOrder = factory.sortingOrder;
 	}
 
 	public void UpdateLayer(Factory factory)
@@ -140,8 +109,8 @@ public class CombinedMeshComponent : MonoBehaviour
 
 	public void SetMaterial(Material material, UnityEngine.Color ac)
 	{
-		if (meshRenderer.sharedMaterial != material)
-			meshRenderer.sharedMaterial = material;
+		if (canvasRenderer.GetMaterial() != material)
+			canvasRenderer.SetMaterial(material, null);
 		additionalColor = ac;
 		buffer.modified = true;
 	}
@@ -151,8 +120,8 @@ public class CombinedMeshComponent : MonoBehaviour
 		updateCount = 0;
 		rendererCount = 0;
 		rectangleCount = 0;
-		meshRenderer.sharedMaterial = null;
-		mesh.Clear(true);
+		canvasRenderer.SetMaterial(null, null);
+		canvasRenderer.Clear();
 		gameObject.SetActive(false);
 	}
 
@@ -174,27 +143,19 @@ public class CombinedMeshComponent : MonoBehaviour
 
 		if (buffer.modified) {
 			buffer.modified = false;
-			mesh.Clear(true);
-			mesh.vertices = buffer.vertices;
-			mesh.uv = buffer.uv;
-			mesh.triangles = buffer.triangles;
-			mesh.colors32 = buffer.colors32;
-			mesh.RecalculateBounds();
+			canvasRenderer.SetVertices(buffer.vertices, rectangleCount * 4);
 		}
 
 		if (property != null) {
 			property.AddColor(additionalColorId, additionalColor);
-			meshRenderer.SetPropertyBlock(property);
+			//meshRenderer.SetPropertyBlock(property);
 		}
 	}
 
 	void OnDestroy()
 	{
-		meshRenderer.sharedMaterial = null;
-		meshFilter.sharedMesh = null;
-		UnityEngine.MeshRenderer.Destroy(meshRenderer);
-		MeshFilter.Destroy(meshFilter);
-		Mesh.Destroy(mesh);
+		canvasRenderer.SetMaterial(null, null);
+		UnityEngine.CanvasRenderer.Destroy(canvasRenderer);
 	}
 }
 
@@ -203,8 +164,8 @@ public partial class Factory : UnityRenderer.Factory
 	public int updateCount;
 	private int meshComponentNo;
 	private int usedMeshComponentNo;
-	private List<CombinedMeshComponent> meshComponents;
-	private CombinedMeshComponent currentMeshComponent;
+	private List<UIVertexComponent> meshComponents;
+	private UIVertexComponent currentMeshComponent;
 	private Factory parent;
 
 	public Factory(Data d, GameObject gObj,
@@ -222,7 +183,7 @@ public partial class Factory : UnityRenderer.Factory
 		CreateBitmapContexts();
 		CreateTextContexts();
 
-		meshComponents = new List<CombinedMeshComponent>();
+		meshComponents = new List<UIVertexComponent>();
 		if (!attaching)
 			AddMeshComponent();
 		usedMeshComponentNo = -1;
@@ -232,7 +193,7 @@ public partial class Factory : UnityRenderer.Factory
 
 	public override void Destruct()
 	{
-		foreach (CombinedMeshComponent meshComponent in meshComponents)
+		foreach (UIVertexComponent meshComponent in meshComponents)
 			GameObject.Destroy(meshComponent.gameObject);
 
 		DestructBitmapContexts();
@@ -241,7 +202,7 @@ public partial class Factory : UnityRenderer.Factory
 		base.Destruct();
 	}
 
-	private CombinedMeshComponent AddMeshComponent()
+	private UIVertexComponent AddMeshComponent()
 	{
 		GameObject gobj = new GameObject(
 			"LWF/" + data.name + "/Mesh/" + meshComponents.Count);
@@ -250,8 +211,8 @@ public partial class Factory : UnityRenderer.Factory
 		gobj.transform.localPosition = Vector3.zero;
 		gobj.transform.localScale = Vector3.one;
 		gobj.transform.localRotation = Quaternion.identity;
-		CombinedMeshComponent meshComponent =
-			gobj.AddComponent<CombinedMeshComponent>();
+		UIVertexComponent meshComponent =
+			gobj.AddComponent<UIVertexComponent>();
 		meshComponent.Init(this);
 		meshComponents.Add(meshComponent);
 		return meshComponent;
@@ -287,7 +248,7 @@ public partial class Factory : UnityRenderer.Factory
 			currentMeshComponent.SetMaterial(material, additionalColor);
 		} else {
 			Material componentMaterial =
-				currentMeshComponent.meshRenderer.sharedMaterial;
+				currentMeshComponent.canvasRenderer.GetMaterial();
 			if (componentMaterial != material ||
 					(currentMeshComponent.property != null &&
 					currentMeshComponent.additionalColor != additionalColor)) {
@@ -326,13 +287,13 @@ public partial class Factory : UnityRenderer.Factory
 
 	public override void UpdateSortingLayerAndOrder()
 	{
-		foreach (CombinedMeshComponent meshComponent in meshComponents)
+		foreach (UIVertexComponent meshComponent in meshComponents)
 			meshComponent.UpdateSortingLayerAndOrder(this);
 	}
 
 	public override void UpdateLayer()
 	{
-		foreach (CombinedMeshComponent meshComponent in meshComponents)
+		foreach (UIVertexComponent meshComponent in meshComponents)
 			meshComponent.UpdateLayer(this);
 	}
 
@@ -354,5 +315,5 @@ public partial class Factory : UnityRenderer.Factory
 	}
 }
 
-}	// namespace CombinedMeshRenderer
+}	// namespace UIVertexRenderer
 }	// namespace LWF

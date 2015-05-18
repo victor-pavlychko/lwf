@@ -170,7 +170,10 @@ public:
 
 	int AddEventHandler(string eventName, MovieEventHandler eventHandler);
 	void RemoveEventHandler(string eventName, int id);
+	void RemoveMovieEventHandler(int id);
 	void ClearEventHandler(string eventName);
+	void ClearMovieEventHandler();
+	virtual void ClearAllEventHandler();
 	int SetEventHandler(string eventName, MovieEventHandler eventHandler);
 	void DispatchEvent(string eventName);
 
@@ -228,6 +231,9 @@ public:
 	Movie *AttachEmptyMovie(string attachName,
 		int attachDepth = -1, bool reorder = false);
 	void SwapAttachedMovieDepth(int depth0, int depth1);
+	Movie *GetAttachedMovie(string aName) const;
+	Movie *GetAttachedMovie(int aDepth) const;
+	Movie *SearchAttachedMovie(string aName, bool recursive = true) const;
 	void DetachMovie(string aName);
 	void DetachMovie(int aDepth);
 	void DetachMovie(Movie *movie);
@@ -240,6 +246,10 @@ public:
 	void AttachLWF(shared_ptr<LWF> attachLWF, string aName,
 		int aDepth = -1, bool reorder = false);
 	void SwapAttachedLWFDepth(int depth0, int depth1);
+	shared_ptr<LWF> GetAttachedLWF(string aName) const;
+	shared_ptr<LWF> GetAttachedLWF(int aDepth) const;
+	shared_ptr<LWF> SearchAttachedLWF(
+		string aName, bool recursive = true) const;
 	void DetachLWF(string aName);
 	void DetachLWF(int aDepth);
 	void DetachLWF(shared_ptr<LWF> detachLWF);
@@ -259,8 +269,8 @@ public:
 	const CurrentLabels GetCurrentLabels();
 
 private:
-	void ExecObject(int dlDepth, int objId,
-		int matrixId, int colorTransformId, int instId, int dlBlendMode);
+	void ExecObject(int dlDepth, int objId, int matrixId, int colorTransformId,
+		int instId, int dlBlendMode, bool updateBlendMode = false);
 	void UpdateObject(Object *obj, const Matrix *m, const ColorTransform *c,
 		bool matrixChanged, bool colorTransformChanged);
 	void PlayAnimation(int clipEvent);
