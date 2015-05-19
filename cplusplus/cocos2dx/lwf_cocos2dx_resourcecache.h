@@ -74,8 +74,6 @@ private:
 	TextRendererCache_t m_textRendererCache;
 	LWF::string m_fontPathPrefix;
 	LWF::string m_particlePathPrefix;
-	cocos2d::GLProgram *m_addColorGLProgram;
-	cocos2d::GLProgram *m_addColorPAGLProgram;
 #if (CC_TARGET_PLATFORM == CC_PLATFORM_ANDROID)
 	cocos2d::EventListenerCustom *m_listener;
 #endif

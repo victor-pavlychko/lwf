@@ -101,9 +101,8 @@ LWFResourceCache *LWFResourceCache::sharedLWFResourceCache()
 }
 
 LWFResourceCache::LWFResourceCache()
-	: m_addColorGLProgram(0), m_addColorPAGLProgram(0)
 #if (CC_TARGET_PLATFORM == CC_PLATFORM_ANDROID)
-		, m_listener(0)
+    : m_listener(0)
 #endif
 {
 	m_fontPathPrefix = "fonts/";
@@ -118,9 +117,6 @@ LWFResourceCache::~LWFResourceCache()
 			)->getEventDispatcher()->removeEventListener(m_listener);
 	}
 #endif
-
-	CC_SAFE_RELEASE_NULL(m_addColorGLProgram);
-	CC_SAFE_RELEASE_NULL(m_addColorPAGLProgram);
 }
 
 shared_ptr<LWFData> LWFResourceCache::loadLWFDataInternal(const string &path)
@@ -477,32 +473,32 @@ Texture2D *LWFResourceCache::addImage(const char *file)
 
 void LWFResourceCache::initAddColorGLProgram()
 {
-	m_addColorGLProgram = GLProgram::createWithByteArrays(
+	GLProgram *addColorGLProgram = GLProgram::createWithByteArrays(
 		ccPositionTextureColor_noMVP_vert,
 		s_additiveColor_frag);
-	m_addColorGLProgram->retain();
+    GLProgramCache::getInstance()->addGLProgram(addColorGLProgram, "LWF::addColorGLProgram");
 
-	m_addColorPAGLProgram = GLProgram::createWithByteArrays(
+	GLProgram *addColorPAGLProgram = GLProgram::createWithByteArrays(
 		ccPositionTextureColor_noMVP_vert,
 		s_additiveColorWithPremultipliedAlpha_frag);
-	m_addColorPAGLProgram->retain();
+    GLProgramCache::getInstance()->addGLProgram(addColorPAGLProgram, "LWF::addColorPAGLProgram");
 
 #if (CC_TARGET_PLATFORM == CC_PLATFORM_ANDROID)
 	m_listener = EventListenerCustom::create(
 			EVENT_RENDERER_RECREATED, [this](EventCustom*){
-		m_addColorGLProgram->reset();
-		m_addColorGLProgram->initWithByteArrays(
+		addColorGLProgram->reset();
+		addColorGLProgram->initWithByteArrays(
 			ccPositionTextureColor_noMVP_vert,
 			s_additiveColor_frag);
-		m_addColorGLProgram->link();
-		m_addColorGLProgram->updateUniforms();
+		addColorGLProgram->link();
+		addColorGLProgram->updateUniforms();
 
-		m_addColorPAGLProgram->reset();
-		m_addColorPAGLProgram->initWithByteArrays(
+		addColorPAGLProgram->reset();
+		addColorPAGLProgram->initWithByteArrays(
 			ccPositionTextureColor_noMVP_vert,
 			s_additiveColorWithPremultipliedAlpha_frag);
-		m_addColorPAGLProgram->link();
-		m_addColorPAGLProgram->updateUniforms();
+		addColorPAGLProgram->link();
+		addColorPAGLProgram->updateUniforms();
 	});
 	Director::getInstance()->getEventDispatcher(
 		)->addEventListenerWithFixedPriority(m_listener, -1);
@@ -511,16 +507,26 @@ void LWFResourceCache::initAddColorGLProgram()
 
 GLProgram *LWFResourceCache::getAddColorGLProgram()
 {
-	if (m_addColorGLProgram == 0)
+    GLProgram *addColorGLProgram = GLProgramCache::getInstance()->getGLProgram("LWF::addColorGLProgram");
+	if (!addColorGLProgram)
+    {
 		initAddColorGLProgram();
-	return m_addColorGLProgram;
+        addColorGLProgram = GLProgramCache::getInstance()->getGLProgram("LWF::addColorGLProgram");
+    }
+
+	return addColorGLProgram;
 }
 
 GLProgram *LWFResourceCache::getAddColorPAGLProgram()
 {
-	if (m_addColorPAGLProgram == 0)
-		initAddColorGLProgram();
-	return m_addColorPAGLProgram;
+    GLProgram *addColorPAGLProgram = GLProgramCache::getInstance()->getGLProgram("LWF::addColorPAGLProgram");
+    if (!addColorPAGLProgram)
+    {
+        initAddColorGLProgram();
+        addColorPAGLProgram = GLProgramCache::getInstance()->getGLProgram("LWF::addColorPAGLProgram");
+    }
+
+	return addColorPAGLProgram;
 }
 
 void LWFResourceCache::unloadLWFDataInternal(const shared_ptr<LWFData> &data)
@@ -641,9 +647,6 @@ void LWFResourceCache::unloadAll()
 	m_dataCacheMap.clear();
 
 	m_particleCache.clear();
-
-	CC_SAFE_RELEASE_NULL(m_addColorGLProgram);
-	CC_SAFE_RELEASE_NULL(m_addColorPAGLProgram);
 }
 
 void LWFResourceCache::dump()
